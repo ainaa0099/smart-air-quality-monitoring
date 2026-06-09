@@ -1,0 +1,296 @@
+{
+  "info": {
+    "name": "Smart City Platform - OAuth 2.0 & API Gateway",
+    "description": "API collection for testing OAuth 2.0 Authorization Server and API Gateway",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Gateway Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3001/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["health"]
+            },
+            "description": "Check gateway and all downstream services health"
+          }
+        },
+        {
+          "name": "Auth Service Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3002/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3002",
+              "path": ["health"]
+            },
+            "description": "Check OAuth server health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/auth/register",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register a new user account"
+          }
+        },
+        {
+          "name": "Login User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/auth/login",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Login user and get tokens"
+          }
+        },
+        {
+          "name": "Social Login (Mock)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"google\",\n  \"token\": \"access-token\",\n  \"email\": \"socialuser@gmail.com\",\n  \"name\": \"Social User\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/auth/social-login",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["api", "auth", "social-login"]
+            },
+            "description": "Mock endpoint for Social Login (Google, Facebook, Github)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "OAuth 2.0 - Token Endpoint",
+      "item": [
+        {
+          "name": "Password Grant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"grant_type\": \"password\",\n  \"username\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/oauth/token",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["oauth", "token"]
+            },
+            "description": "Get access token using password grant (user login)"
+          }
+        },
+        {
+          "name": "Client Credentials Grant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"grant_type\": \"client_credentials\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/oauth/token",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["oauth", "token"]
+            },
+            "description": "Get access token using client credentials grant (service-to-service)"
+          }
+        },
+        {
+          "name": "Refresh Token Grant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"grant_type\": \"refresh_token\",\n  \"refresh_token\": \"{refresh_token}\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/oauth/token",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["oauth", "token"]
+            },
+            "description": "Refresh access token using refresh token"
+          }
+        }
+      ]
+    },
+    {
+      "name": "OAuth 2.0 - Token Management",
+      "item": [
+        {
+          "name": "Introspect Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{access_token}\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/oauth/introspect",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["oauth", "introspect"]
+            },
+            "description": "Validate token and get token metadata"
+          }
+        },
+        {
+          "name": "Revoke Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{access_token}\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/oauth/revoke",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["oauth", "revoke"]
+            },
+            "description": "Revoke access token"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Protected Routes",
+      "item": []
+    },
+    {
+      "name": "Error Cases",
+      "item": [
+        {
+          "name": "Invalid Grant Type",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"grant_type\": \"invalid_grant\",\n  \"username\": \"user@example.com\",\n  \"password\": \"password\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/oauth/token",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["oauth", "token"]
+            },
+            "description": "Request token with unsupported grant type (should get 400)"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "access_token",
+      "value": "",
+      "description": "Access token obtained from /oauth/token endpoint"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "description": "Refresh token obtained from /oauth/token endpoint"
+    }
+  ]
+}
