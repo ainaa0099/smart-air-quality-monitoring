@@ -11,15 +11,11 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 3002;
 
-// ==================== CONFIGURATION ====================
-
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || "access-secret-key";
 const JWT_ACCESS_EXPIRES = process.env.JWT_ACCESS_EXPIRES || "15m";
 const JWT_REFRESH_SECRET =
   process.env.JWT_REFRESH_SECRET || "refresh-secret-key";
 const JWT_REFRESH_EXPIRES = process.env.JWT_REFRESH_EXPIRES || "7d";
-
-// ==================== MIDDLEWARE ====================
 
 app.use(
   cors({
@@ -33,9 +29,6 @@ app.use(express.urlencoded({ extended: true }));
 
 // ==================== UTILITIES ====================
 
-/**
- * Generate Access Token
- */
 const generateAccessToken = (user, clientId = null) => {
   const payload = {
     sub: user.id,
@@ -52,9 +45,6 @@ const generateAccessToken = (user, clientId = null) => {
   });
 };
 
-/**
- * Generate Refresh Token
- */
 const generateRefreshToken = (userId) => {
   return jwt.sign({ sub: userId }, JWT_REFRESH_SECRET, {
     expiresIn: JWT_REFRESH_EXPIRES,
@@ -62,30 +52,18 @@ const generateRefreshToken = (userId) => {
   });
 };
 
-/**
- * Generate Authorization Code
- */
 const generateAuthorizationCode = () => {
   return crypto.randomBytes(32).toString("hex");
 };
 
-/**
- * Hash password
- */
 const hashPassword = async (password) => {
   return bcryptjs.hash(password, 10);
 };
 
-/**
- * Verify password
- */
 const verifyPassword = async (password, hash) => {
   return bcryptjs.compare(password, hash);
 };
 
-/**
- * Validate client credentials
- */
 const validateClient = async (clientId, clientSecret) => {
   try {
     const connection = await db.getConnection();
@@ -165,11 +143,6 @@ app.get("/metrics", async (req, res) => {
 
 // ==================== OAUTH 2.0 TOKEN ENDPOINT ====================
 
-/**
- * POST /oauth/token
- * OAuth 2.0 Token Endpoint
- * Supports: password, client_credentials, refresh_token grant types
- */
 app.post("/oauth/token", async (req, res) => {
   const {
     grant_type,
@@ -409,11 +382,6 @@ app.post("/oauth/token", async (req, res) => {
 
 // ==================== OAUTH 2.0 INTROSPECTION ENDPOINT ====================
 
-/**
- * POST /oauth/introspect
- * Token Introspection Endpoint
- * Returns token validity and metadata
- */
 app.post("/oauth/introspect", async (req, res) => {
   const gatewaySecret = req.headers["x-gateway-secret"];
   if (gatewaySecret !== process.env.GATEWAY_INTERNAL_SECRET) {
@@ -473,11 +441,6 @@ app.post("/oauth/introspect", async (req, res) => {
 });
 
 // ==================== OAUTH 2.0 REVOCATION ENDPOINT ====================
-
-/**
- * POST /oauth/revoke
- * Token Revocation Endpoint
- */
 app.post("/oauth/revoke", async (req, res) => {
   const { token, token_type_hint } = req.body;
 
@@ -527,10 +490,6 @@ app.post("/oauth/revoke", async (req, res) => {
 
 // ==================== USER ENDPOINTS ====================
 
-/**
- * POST /register
- * User Registration
- */
 app.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -614,10 +573,6 @@ app.post("/register", async (req, res) => {
   }
 });
 
-/**
- * POST /login
- * User Login
- */
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -685,42 +640,337 @@ app.post("/login", async (req, res) => {
   }
 });
 
-/**
- * POST /social-login
- * Endpoint for Google, Facebook, and GitHub Login (Mock/Skeleton)
- */
-app.post("/social-login", async (req, res) => {
-  const { provider, token, email, name } = req.body;
+// ==================== SOCIAL OAUTH ====================
 
-  if (!provider || !["google", "facebook", "github"].includes(provider)) {
-    return errorResponse(
-      res,
-      400,
-      "error",
-      "Valid provider (google, facebook, github) is required",
-    );
-  }
+// 1. In-Memory State Management (Mencegah CSRF Attack)
+const oauthStates = new Map();
 
-  if (!token) {
-    return errorResponse(res, 400, "error", "Social token is required");
-  }
-
-  // Mengembalikan response mock untuk keperluan testing endpoint:
-  return res.status(200).json({
-    status: "success",
-    code: 200,
-    data: {
-      user: {
-        name: name || `User ${provider}`,
-        email: email || `user@${provider}.com`,
-        oauth_provider: provider,
-      },
-      access_token: "MOCK_JWT_UNTUK_SOCIAL_LOGIN",
-      message: `Berhasil hit endpoint social login. Silakan implementasikan validasi token API ${provider} sesungguhnya.`,
-    },
-    timestamp: new Date().toISOString(),
-    service: "auth",
+const generateState = (provider, returnJson) => {
+  const state = crypto.randomBytes(16).toString("hex");
+  oauthStates.set(state, {
+    provider,
+    returnJson: returnJson === "true",
+    expiresAt: Date.now() + 10 * 60 * 1000, // Valid 10 menit
   });
+  return state;
+};
+
+const validateState = (state, provider) => {
+  const stateData = oauthStates.get(state);
+  if (!stateData) return null;
+  oauthStates.delete(state); // State hanya boleh dipakai 1 kali
+  if (stateData.provider !== provider || stateData.expiresAt < Date.now())
+    return null;
+  return stateData;
+};
+
+// 2. Logic Registrasi & Binding Akun Social
+const findOrCreateSocialUser = async (profile) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Cek apakah akun social ini sudah dibinding dengan user lokal
+    const [sa] = await connection.query(
+      "SELECT user_id FROM social_accounts WHERE provider = ? AND provider_user_id = ?",
+      [profile.provider, profile.id],
+    );
+
+    if (sa.length > 0) {
+      const [users] = await connection.query(
+        "SELECT * FROM users WHERE id = ?",
+        [sa[0].user_id],
+      );
+      await connection.commit();
+      return users[0];
+    }
+
+    // Jika belum dibinding, cek apakah email yang dipakai sama dengan user yg sudah ada
+    let userId;
+    if (profile.email) {
+      const [existingUsers] = await connection.query(
+        "SELECT * FROM users WHERE email = ?",
+        [profile.email],
+      );
+      if (existingUsers.length > 0) {
+        userId = existingUsers[0].id;
+      }
+    }
+
+    // Jika email juga tidak ada, buat user lokal baru
+    if (!userId) {
+      const emailToUse =
+        profile.email || `${profile.id}@${profile.provider}.local`;
+      const [res] = await connection.query(
+        "INSERT INTO users (name, email, avatar_url, oauth_provider, is_active) VALUES (?, ?, ?, ?, TRUE)",
+        [
+          profile.name || "Unknown User",
+          emailToUse,
+          profile.avatar_url,
+          profile.provider,
+        ],
+      );
+      userId = res.insertId;
+    }
+
+    // Insert relasi social_accounts
+    await connection.query(
+      "INSERT INTO social_accounts (user_id, provider, provider_user_id, provider_email, avatar_url) VALUES (?, ?, ?, ?, ?)",
+      [userId, profile.provider, profile.id, profile.email, profile.avatar_url],
+    );
+
+    await connection.commit();
+    const [finalUser] = await connection.query(
+      "SELECT * FROM users WHERE id = ?",
+      [userId],
+    );
+    return finalUser[0];
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+// 3. Token Issuer & Response Handler
+const issueInternalTokens = async (user) => {
+  const accessToken = generateAccessToken(user, "social_login");
+  const refreshToken = generateRefreshToken(user.id);
+
+  const connection = await db.getConnection();
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+
+  await connection.query(
+    "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
+    [user.id, refreshToken, expiresAt],
+  );
+  connection.release();
+
+  return { accessToken, refreshToken };
+};
+
+const handleSocialCallbackResponse = (res, stateData, profile, tokens) => {
+  // Menampilkan log response ke terminal/console backend Auth Service
+  console.log(`\n[OAUTH SUCCESS - ${profile.provider.toUpperCase()}]`);
+  console.log(`- Provider ID   : ${profile.id}`);
+  console.log(`- Name          : ${profile.name}`);
+  console.log(`- Email         : ${profile.email}`);
+  console.log(`- Access Token  : ${tokens.accessToken.substring(0, 30)}...`);
+  console.log(`- Refresh Token : ${tokens.refreshToken.substring(0, 30)}...`);
+  console.log(`- Mode JSON     : ${stateData.returnJson}`);
+  console.log(`------------------------------------------------\n`);
+
+  if (stateData.returnJson) {
+    return res.status(200).json({
+      status: "success",
+      code: 200,
+      data: {
+        provider: profile.provider,
+        user: {
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          oauth_provider: profile.provider,
+          avatar_url: profile.avatar_url,
+        },
+        access_token: tokens.accessToken,
+        refresh_token: tokens.refreshToken,
+        token_type: "Bearer",
+        expires_in: 900, // 15 mins
+      },
+      message: `${profile.provider} login successful`,
+      timestamp: new Date().toISOString(),
+      service: "auth",
+    });
+  }
+
+  // Redirect to frontend (with tokens in hash fragment to hide from logs)
+  const redirectUrl = `${process.env.FRONTEND_SUCCESS_URL || "http://localhost:3000/auth/success"}#access_token=${tokens.accessToken}&refresh_token=${tokens.refreshToken}`;
+  res.redirect(redirectUrl);
+};
+
+// -------------------- GOOGLE --------------------
+app.get("/google", (req, res) => {
+  const state = generateState("google", req.query.json);
+  const params = new URLSearchParams({
+    client_id: process.env.GOOGLE_CLIENT_ID || "",
+    redirect_uri: process.env.GOOGLE_CALLBACK_URL || "",
+    response_type: "code",
+    scope: "openid email profile",
+    state: state,
+  });
+  res.redirect(
+    `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+  );
+});
+
+app.get("/callback/google", async (req, res) => {
+  const { code, state, error } = req.query;
+
+  if (error) return res.redirect(process.env.FRONTEND_ERROR_URL || "/error");
+  const stateData = validateState(state, "google");
+  if (!stateData)
+    return errorResponse(res, 400, "error", "Invalid or expired state");
+
+  try {
+    const tokenRes = await axios.post("https://oauth2.googleapis.com/token", {
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      code,
+      redirect_uri: process.env.GOOGLE_CALLBACK_URL,
+      grant_type: "authorization_code",
+    });
+
+    const profileRes = await axios.get(
+      "https://www.googleapis.com/oauth2/v2/userinfo",
+      {
+        headers: { Authorization: `Bearer ${tokenRes.data.access_token}` },
+      },
+    );
+
+    const profileData = {
+      provider: "google",
+      id: profileRes.data.id,
+      email: profileRes.data.email,
+      name: profileRes.data.name,
+      avatar_url: profileRes.data.picture,
+    };
+
+    const user = await findOrCreateSocialUser(profileData);
+    const tokens = await issueInternalTokens(user);
+    handleSocialCallbackResponse(res, stateData, profileData, tokens);
+  } catch (err) {
+    console.error("Google OAuth Error:", err.response?.data || err.message);
+    res.redirect(process.env.FRONTEND_ERROR_URL || "/error");
+  }
+});
+
+// -------------------- GITHUB --------------------
+app.get("/github", (req, res) => {
+  const state = generateState("github", req.query.json);
+  const params = new URLSearchParams({
+    client_id: process.env.GITHUB_CLIENT_ID || "",
+    redirect_uri: process.env.GITHUB_CALLBACK_URL || "",
+    scope: "user:email",
+    state: state,
+  });
+  res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`);
+});
+
+app.get("/callback/github", async (req, res) => {
+  const { code, state, error } = req.query;
+
+  if (error) return res.redirect(process.env.FRONTEND_ERROR_URL || "/error");
+  const stateData = validateState(state, "github");
+  if (!stateData)
+    return errorResponse(res, 400, "error", "Invalid or expired state");
+
+  try {
+    const tokenRes = await axios.post(
+      "https://github.com/login/oauth/access_token",
+      {
+        client_id: process.env.GITHUB_CLIENT_ID,
+        client_secret: process.env.GITHUB_CLIENT_SECRET,
+        code,
+        redirect_uri: process.env.GITHUB_CALLBACK_URL,
+      },
+      { headers: { Accept: "application/json" } },
+    );
+
+    const ghToken = tokenRes.data.access_token;
+
+    const profileRes = await axios.get("https://api.github.com/user", {
+      headers: { Authorization: `Bearer ${ghToken}` },
+    });
+
+    let email = profileRes.data.email;
+    if (!email) {
+      // Request separate email endpoint jika email di-private
+      const emailRes = await axios.get("https://api.github.com/user/emails", {
+        headers: { Authorization: `Bearer ${ghToken}` },
+      });
+      const primaryEmail = emailRes.data.find((e) => e.primary && e.verified);
+      email = primaryEmail ? primaryEmail.email : emailRes.data[0]?.email;
+    }
+
+    const profileData = {
+      provider: "github",
+      id: profileRes.data.id.toString(),
+      email: email,
+      name: profileRes.data.name || profileRes.data.login,
+      avatar_url: profileRes.data.avatar_url,
+    };
+
+    const user = await findOrCreateSocialUser(profileData);
+    const tokens = await issueInternalTokens(user);
+    handleSocialCallbackResponse(res, stateData, profileData, tokens);
+  } catch (err) {
+    console.error("GitHub OAuth Error:", err.response?.data || err.message);
+    res.redirect(process.env.FRONTEND_ERROR_URL || "/error");
+  }
+});
+
+// -------------------- FACEBOOK --------------------
+app.get("/facebook", (req, res) => {
+  const state = generateState("facebook", req.query.json);
+  const params = new URLSearchParams({
+    client_id: process.env.FACEBOOK_APP_ID || "",
+    redirect_uri: process.env.FACEBOOK_CALLBACK_URL || "",
+    scope: "email,public_profile",
+    state: state,
+  });
+  res.redirect(
+    `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`,
+  );
+});
+
+app.get("/callback/facebook", async (req, res) => {
+  const { code, state, error } = req.query;
+
+  if (error) return res.redirect(process.env.FRONTEND_ERROR_URL || "/error");
+  const stateData = validateState(state, "facebook");
+  if (!stateData)
+    return errorResponse(res, 400, "error", "Invalid or expired state");
+
+  try {
+    const tokenRes = await axios.get(
+      "https://graph.facebook.com/v19.0/oauth/access_token",
+      {
+        params: {
+          client_id: process.env.FACEBOOK_APP_ID,
+          client_secret: process.env.FACEBOOK_APP_SECRET,
+          redirect_uri: process.env.FACEBOOK_CALLBACK_URL,
+          code,
+        },
+      },
+    );
+
+    const fbToken = tokenRes.data.access_token;
+
+    const profileRes = await axios.get("https://graph.facebook.com/v19.0/me", {
+      params: {
+        fields: "id,name,email,picture.type(large)",
+        access_token: fbToken,
+      },
+    });
+
+    const profileData = {
+      provider: "facebook",
+      id: profileRes.data.id,
+      email: profileRes.data.email,
+      name: profileRes.data.name,
+      avatar_url: profileRes.data.picture?.data?.url,
+    };
+
+    const user = await findOrCreateSocialUser(profileData);
+    const tokens = await issueInternalTokens(user);
+    handleSocialCallbackResponse(res, stateData, profileData, tokens);
+  } catch (err) {
+    console.error("Facebook OAuth Error:", err.response?.data || err.message);
+    res.redirect(process.env.FRONTEND_ERROR_URL || "/error");
+  }
 });
 
 // ==================== ERROR HANDLERS ====================
