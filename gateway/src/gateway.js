@@ -5,6 +5,7 @@ const rateLimit = require("express-rate-limit");
 const jwt = require("jsonwebtoken");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const axios = require("axios");
+const client = require("prom-client");
 require("dotenv").config();
 
 const app = express();
@@ -104,6 +105,14 @@ const loginRateLimiter = rateLimit({
   },
 });
 
+// ==================== METRICS ====================
+const collectDefaultMetrics = client.collectDefaultMetrics;
+collectDefaultMetrics({ register: client.register });
+app.get("/metrics", async (req, res) => {
+  res.set("Content-Type", client.register.contentType);
+  res.end(await client.register.metrics());
+});
+
 const tokenBlacklist = new Set();
 
 // Middleware tambahan untuk memperbaiki body yang hilang saat di proxy
@@ -117,13 +126,14 @@ const fixProxyBody = (proxyReq, req, res) => {
 };
 
 const introspectToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(" ")[1];
 
-  if (!token) {
+  if (!authHeader || !authHeader.startsWith("Bearer ") || !token) {
     return res.status(401).json({
       status: "error",
       code: 401,
-      message: "No authorization token provided",
+      message: "Missing or invalid token",
       timestamp: new Date().toISOString(),
       service: "gateway",
     });
@@ -143,7 +153,10 @@ const introspectToken = async (req, res, next) => {
     const introspectResponse = await axios.post(
       `${OAUTH_SERVER_URL}/oauth/introspect`,
       { token },
-      { timeout: 5000 },
+      {
+        timeout: 5000,
+        headers: { "x-gateway-secret": process.env.GATEWAY_INTERNAL_SECRET },
+      },
     );
 
     if (!introspectResponse.data.active) {
@@ -162,26 +175,23 @@ const introspectToken = async (req, res, next) => {
   } catch (error) {
     console.error("Token introspection error:", error.message);
 
-    try {
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_ACCESS_SECRET || "fallback-secret",
-      );
-      req.user = decoded;
-      req.token = token;
-      console.warn(
-        "Using fallback JWT verification - OAuth server unavailable",
-      );
-      next();
-    } catch (jwtError) {
-      return res.status(401).json({
+    if (error.response && error.response.status === 403) {
+      return res.status(403).json({
         status: "error",
-        code: 401,
-        message: "Invalid or expired token",
+        code: 403,
+        message: "Forbidden access",
         timestamp: new Date().toISOString(),
         service: "gateway",
       });
     }
+
+    return res.status(503).json({
+      status: "error",
+      code: 503,
+      message: "OAuth Server unavailable",
+      timestamp: new Date().toISOString(),
+      service: "gateway",
+    });
   }
 };
 
@@ -232,7 +242,23 @@ app.get("/health", async (req, res) => {
       {
         url: `${process.env.AUTH_SERVICE_URL || "http://localhost:3002"}/health`,
         name: "auth",
-      }, // Kelanjutan dari service health checks pada service lainnya
+      },
+      {
+        url: `${process.env.CITIZEN_SERVICE_URL || "http://localhost:8000"}/health`,
+        name: "citizen",
+      },
+      {
+        url: `${process.env.TRAFFIC_SERVICE_URL || "http://localhost:8001"}/health`,
+        name: "traffic",
+      },
+      {
+        url: `${process.env.ENVIRONMENT_SERVICE_URL || "http://localhost:8002"}/health`,
+        name: "environment",
+      },
+      {
+        url: `${process.env.PYTHON_ML_SERVICE_URL || "http://localhost:5000"}/health`,
+        name: "ml",
+      },
     ];
 
     const healthChecks = await Promise.all(
@@ -335,9 +361,57 @@ app.use(
   }),
 );
 
-app.use("/api/", ipRateLimiter, tokenRateLimiter);
+// ==================== ROUTING TO UPSTREAM SERVICES ====================
 
-// Masukkan Property service lainnya disini
+const createServiceProxy = (targetUrl) => {
+  return createProxyMiddleware({
+    target: targetUrl || "http://localhost:8000",
+    changeOrigin: true,
+    onProxyReq: fixProxyBody,
+    onError: (err, req, res) => {
+      res.status(502).json({
+        status: "error",
+        code: 502,
+        message: "Upstream service unavailable",
+        timestamp: new Date().toISOString(),
+        service: "gateway",
+      });
+    },
+  });
+};
+
+const protectedMiddleware = [ipRateLimiter, introspectToken, tokenRateLimiter];
+
+app.use(
+  "/citizens",
+  protectedMiddleware,
+  createServiceProxy(process.env.CITIZEN_SERVICE_URL),
+);
+app.use(
+  "/traffic",
+  protectedMiddleware,
+  createServiceProxy(process.env.TRAFFIC_SERVICE_URL),
+);
+app.use(
+  "/environment",
+  protectedMiddleware,
+  createServiceProxy(process.env.ENVIRONMENT_SERVICE_URL),
+);
+app.use(
+  "/ml",
+  protectedMiddleware,
+  createServiceProxy(process.env.PYTHON_ML_SERVICE_URL),
+);
+app.use(
+  "/iot/traffic",
+  protectedMiddleware,
+  createServiceProxy(process.env.TRAFFIC_SERVICE_URL),
+);
+app.use(
+  "/iot/air",
+  protectedMiddleware,
+  createServiceProxy(process.env.ENVIRONMENT_SERVICE_URL),
+);
 
 // 404 handler
 app.use((req, res) => {

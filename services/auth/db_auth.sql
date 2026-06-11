@@ -30,6 +30,21 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   INDEX idx_expires_at (expires_at)
 );
 
+-- Social Accounts table (for handling multiple OAuth providers per user)
+CREATE TABLE IF NOT EXISTS social_accounts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  provider VARCHAR(50) NOT NULL COMMENT 'google, github, facebook',
+  provider_user_id VARCHAR(255) NOT NULL,
+  provider_email VARCHAR(255),
+  avatar_url VARCHAR(255),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY uk_provider_user (provider, provider_user_id),
+  INDEX idx_user_id (user_id)
+);
+
 -- OAuth Clients table (for client_credentials grant)
 CREATE TABLE IF NOT EXISTS oauth_clients (
   id INT AUTO_INCREMENT PRIMARY KEY,

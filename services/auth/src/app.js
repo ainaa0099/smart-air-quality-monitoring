@@ -4,6 +4,8 @@ const jwt = require("jsonwebtoken");
 const bcryptjs = require("bcryptjs");
 const crypto = require("crypto");
 const db = require("./config/database");
+const client = require("prom-client");
+const axios = require("axios");
 require("dotenv").config();
 
 const app = express();
@@ -96,11 +98,14 @@ const validateClient = async (clientId, clientSecret) => {
     if (clients.length === 0) return null;
 
     const client = clients[0];
-    const isValidSecret = await bcryptjs.compare(
-      clientSecret,
-      client.client_secret,
-    );
-    return isValidSecret ? client : null;
+
+    // Dukungan bcrypt untuk production & plaintext untuk development dummy seed
+    const isBcryptMatch = await bcryptjs
+      .compare(clientSecret, client.client_secret)
+      .catch(() => false);
+    const isPlaintextMatch = clientSecret === client.client_secret;
+
+    return isBcryptMatch || isPlaintextMatch ? client : null;
   } catch (error) {
     console.error("Client validation error:", error);
     return null;
@@ -150,6 +155,14 @@ app.get("/health", async (req, res) => {
   }
 });
 
+// ==================== METRICS ====================
+const collectDefaultMetrics = client.collectDefaultMetrics;
+collectDefaultMetrics({ register: client.register });
+app.get("/metrics", async (req, res) => {
+  res.set("Content-Type", client.register.contentType);
+  res.end(await client.register.metrics());
+});
+
 // ==================== OAUTH 2.0 TOKEN ENDPOINT ====================
 
 /**
@@ -175,13 +188,18 @@ app.post("/oauth/token", async (req, res) => {
   try {
     // =============== PASSWORD GRANT ===============
     if (grant_type === "password") {
-      if (!username || !password) {
+      if (!client_id || !client_secret || !username || !password) {
         return errorResponse(
           res,
           400,
           "error",
-          "username and password are required",
+          "client_id, client_secret, username, and password are required",
         );
+      }
+
+      const client = await validateClient(client_id, client_secret);
+      if (!client) {
+        return errorResponse(res, 401, "error", "Invalid client credentials");
       }
 
       const connection = await db.getConnection();
@@ -300,8 +318,18 @@ app.post("/oauth/token", async (req, res) => {
 
     // =============== REFRESH TOKEN GRANT ===============
     else if (grant_type === "refresh_token") {
-      if (!refresh_token) {
-        return errorResponse(res, 400, "error", "refresh_token is required");
+      if (!client_id || !client_secret || !refresh_token) {
+        return errorResponse(
+          res,
+          400,
+          "error",
+          "client_id, client_secret, and refresh_token are required",
+        );
+      }
+
+      const client = await validateClient(client_id, client_secret);
+      if (!client) {
+        return errorResponse(res, 401, "error", "Invalid client credentials");
       }
 
       const connection = await db.getConnection();
@@ -387,6 +415,14 @@ app.post("/oauth/token", async (req, res) => {
  * Returns token validity and metadata
  */
 app.post("/oauth/introspect", async (req, res) => {
+  const gatewaySecret = req.headers["x-gateway-secret"];
+  if (gatewaySecret !== process.env.GATEWAY_INTERNAL_SECRET) {
+    return res.status(403).json({
+      active: false,
+      error: "Unauthorized access to introspection endpoint",
+    });
+  }
+
   const { token } = req.body;
 
   if (!token) {
@@ -443,7 +479,7 @@ app.post("/oauth/introspect", async (req, res) => {
  * Token Revocation Endpoint
  */
 app.post("/oauth/revoke", async (req, res) => {
-  const { token } = req.body;
+  const { token, token_type_hint } = req.body;
 
   if (!token) {
     return errorResponse(res, 400, "error", "token parameter is required");
@@ -452,23 +488,26 @@ app.post("/oauth/revoke", async (req, res) => {
   try {
     const connection = await db.getConnection();
 
-    // Mark token as revoked in database
-    await connection.query(
-      "INSERT INTO oauth_tokens (token_id, client_id, access_token, token_type, expires_at, is_revoked) VALUES (?, ?, ?, ?, NOW(), TRUE)",
-      [crypto.randomBytes(16).toString("hex"), "unknown", token, "Bearer"],
-    );
-
-    // Also mark refresh tokens as revoked if this is a user token
-    try {
-      const decoded = jwt.verify(token, JWT_ACCESS_SECRET);
-      if (decoded.sub && !token.includes("client")) {
-        await connection.query(
-          "UPDATE refresh_tokens SET is_revoked = TRUE WHERE user_id = ? AND token = ?",
-          [decoded.sub, token],
-        );
-      }
-    } catch (e) {
-      // Token already invalid, continue
+    if (token_type_hint === "access_token") {
+      await connection.query(
+        "INSERT IGNORE INTO oauth_tokens (token_id, client_id, access_token, token_type, expires_at, is_revoked) VALUES (?, ?, ?, ?, NOW(), TRUE)",
+        [crypto.randomBytes(16).toString("hex"), "unknown", token, "Bearer"],
+      );
+    } else if (token_type_hint === "refresh_token") {
+      await connection.query(
+        "UPDATE refresh_tokens SET is_revoked = TRUE WHERE token = ?",
+        [token],
+      );
+    } else {
+      // Try both if no hint
+      await connection.query(
+        "INSERT IGNORE INTO oauth_tokens (token_id, client_id, access_token, token_type, expires_at, is_revoked) VALUES (?, ?, ?, ?, NOW(), TRUE)",
+        [crypto.randomBytes(16).toString("hex"), "unknown", token, "Bearer"],
+      );
+      await connection.query(
+        "UPDATE refresh_tokens SET is_revoked = TRUE WHERE token = ?",
+        [token],
+      );
     }
 
     connection.release();

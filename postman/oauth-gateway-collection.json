@@ -37,6 +37,21 @@
             },
             "description": "Check OAuth server health"
           }
+        },
+        {
+          "name": "Gateway Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3001/metrics",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["metrics"]
+            },
+            "description": "Prometheus Metrics for API Gateway"
+          }
         }
       ]
     },
@@ -132,7 +147,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"grant_type\": \"password\",\n  \"username\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"grant_type\": \"password\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\",\n  \"username\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
               "raw": "http://localhost:3001/oauth/token",
@@ -180,7 +195,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"grant_type\": \"refresh_token\",\n  \"refresh_token\": \"{refresh_token}\"\n}"
+              "raw": "{\n  \"grant_type\": \"refresh_token\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\",\n  \"refresh_token\": \"{refresh_token}\"\n}"
             },
             "url": {
               "raw": "http://localhost:3001/oauth/token",
@@ -205,6 +220,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "x-gateway-secret",
+                "value": "smartcity_internal_secret"
               }
             ],
             "body": {
@@ -233,7 +252,31 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"{access_token}\"\n}"
+              "raw": "{\n  \"token\": \"{{access_token}}\",\n  \"token_type_hint\": \"access_token\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/oauth/revoke",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["oauth", "revoke"]
+            },
+            "description": "Revoke access token"
+          }
+        },
+        {
+          "name": "Revoke Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{refresh_token}}\",\n  \"token_type_hint\": \"refresh_token\"\n}"
             },
             "url": {
               "raw": "http://localhost:3001/oauth/revoke",
@@ -249,7 +292,43 @@
     },
     {
       "name": "Protected Routes",
-      "item": []
+      "item": [
+        {
+          "name": "Get Traffic Data (No Token)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3001/traffic/data",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["traffic", "data"]
+            },
+            "description": "Should return 401 Unauthorized"
+          }
+        },
+        {
+          "name": "Get Traffic Data (With Token)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3001/traffic/data",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["traffic", "data"]
+            },
+            "description": "Should return 200 OK via Proxy"
+          }
+        }
+      ]
     },
     {
       "name": "Error Cases",
