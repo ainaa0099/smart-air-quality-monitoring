@@ -7,26 +7,29 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, IsolationForest
 from sklearn.metrics import classification_report, mean_absolute_error
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CSV_PATH = os.path.join(BASE_DIR, 'data', 'smartcity_telemetry.csv')
+MODEL_DIR = os.path.join(BASE_DIR, 'models')
+MODEL_PATH = os.path.join(MODEL_DIR, 'smartcity_models.pkl')
+
 def create_targets_and_train():
-    if not os.path.exists('data/smartcity_telemetry.csv'):
-        raise FileNotFoundError("Please run generate_dataset.py first to create the telemetry data.")
+    if not os.path.exists(CSV_PATH):
+        raise FileNotFoundError(f"File data tidak ditemukan di {CSV_PATH}. Jalankan generate_dataset.py terlebih dahulu.")
         
-    df = pd.read_csv('data/smartcity_telemetry.csv')
+    df = pd.read_csv(CSV_PATH)
     
-    # --- 1. DEFINE TARGETS FOR THE SEPARATE TASKS ---
-    # AQI Classifier Target: Categorize based on PM2.5 breaks
+    # Klasifikasi internal AQI berdasarkan ambang batas PM2.5
     def assign_aqi_class(pm):
-        if pm <= 35: return 0    # Good
-        elif pm <= 75: return 1  # Moderate
-        else: return 2           # Unhealthy
+        if pm <= 35: return 0    # Baik
+        elif pm <= 75: return 1  # Sedang
+        else: return 2           # Tidak Sehat
         
     df['aqi_class'] = df['pm25'].apply(assign_aqi_class)
     
-    # Features common across models
+    # Fitur prediktor cuaca dan gas sekunder
     feature_cols = ['no2', 'co', 'o3', 'temperature', 'humidity', 'wind_speed', 'wind_direction']
     
-    # --- 2. TRAIN AQI CLASSIFIER ---
-    # Predicts AQI category using secondary gases and weather
+    # 1. Training AQI Classifier
     X_clf = df[feature_cols]
     y_clf = df['aqi_class']
     X_train_c, X_test_c, y_train_c, y_test_c = train_test_split(X_clf, y_clf, test_size=0.2, random_state=42)
@@ -37,29 +40,27 @@ def create_targets_and_train():
     
     clf_model = RandomForestClassifier(n_estimators=100, random_state=42)
     clf_model.fit(X_train_c_scaled, y_train_c)
-    print("AQI Classifier Evaluation:")
+    print("Evaluasi AQI Classifier:")
     print(classification_report(y_test_c, clf_model.predict(X_test_c_scaled)))
     
-    # --- 3. TRAIN POLLUTION PREDICTOR (REGRESSOR) ---
-    # Predicts actual numerical PM2.5 level
+    # 2. Training Pollution Predictor (Regression)
     y_reg = df['pm25']
     X_train_r, X_test_r, y_train_r, y_test_r = train_test_split(X_clf, y_reg, test_size=0.2, random_state=42)
     
     reg_model = RandomForestRegressor(n_estimators=100, random_state=42)
     reg_model.fit(scaler.transform(X_train_r), y_train_r)
     reg_preds = reg_model.predict(scaler.transform(X_test_r))
-    print(f"Pollution Predictor MAE: {mean_absolute_error(y_test_r, reg_preds):.2f} PM2.5 units\n")
+    print(f"Pollution Predictor MAE: {mean_absolute_error(y_test_r, reg_preds):.2f} unit PM2.5\n")
     
-    # --- 4. TRAIN ANOMALY DETECTOR (UNSUPERVISED) ---
-    # Uses all numerical indicators to isolate anomalous sensor drops or extreme spikes
+    # 3. Training Anomaly Detector (Unsupervised)
     anomaly_features = ['pm25', 'pm10', 'no2', 'co', 'o3', 'temperature', 'humidity', 'wind_speed']
     X_anom = df[anomaly_features]
     
-    # Contamination set roughly to matches injected anomalies (~5%)
     anom_detector = IsolationForest(contamination=0.05, random_state=42)
     anom_detector.fit(X_anom)
+    print("Anomaly Detector berhasil dilatih.")
     
-    # --- 5. BUNDLE AND EXPORT ---
+    # Ekspor seluruh objek model
     models_payload = {
         'scaler': scaler,
         'feature_cols': feature_cols,
@@ -69,11 +70,11 @@ def create_targets_and_train():
         'anomaly_detector': anom_detector
     }
     
-    os.makedirs('models', exist_ok=True)
-    with open('models/smartcity_models.pkl', 'wb') as f:
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    with open(MODEL_PATH, 'wb') as f:
         pickle.dump(models_payload, f)
         
-    print("All 3 models trained and saved successfully into 'models/smartcity_models.pkl'")
+    print(f"Seluruh model berhasil disimpan pada: {MODEL_PATH}")
 
 if __name__ == '__main__':
     create_targets_and_train()
