@@ -26,6 +26,6 @@ const createService = (name, port) => {
 
 // Boot all dummy services
 createService("Citizen Service", 8000);
-createService("Traffic Service", 8001);
+createService("Airquality Service", 8001);
 createService("Environment Service", 8002);
 createService("Python ML Service", 5000);
