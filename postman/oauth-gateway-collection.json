@@ -14,10 +14,10 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "http://localhost:3001/health",
+              "raw": "http://localhost:3000/health",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
+              "port": "3000",
               "path": ["health"]
             },
             "description": "Check gateway and all downstream services health"
@@ -44,11 +44,14 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "http://localhost:3001/metrics",
+              "raw": "http://localhost:3000/api/metrics",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
-              "path": ["metrics"]
+              "port": "3000",
+              "path": [
+                "api",
+                "metrics"
+              ]
             },
             "description": "Prometheus Metrics for API Gateway"
           }
@@ -73,10 +76,10 @@
               "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3001/api/auth/register",
+              "raw": "http://localhost:3000/api/auth/register",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
+              "port": "3000",
               "path": ["api", "auth", "register"]
             },
             "description": "Register a new user account"
@@ -97,10 +100,10 @@
               "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3001/api/auth/login",
+              "raw": "http://localhost:3000/api/auth/login",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
+              "port": "3000",
               "path": ["api", "auth", "login"]
             },
             "description": "Login user and get tokens"
@@ -121,10 +124,10 @@
               "raw": "{\n  \"provider\": \"google\",\n  \"token\": \"access-token\",\n  \"email\": \"socialuser@gmail.com\",\n  \"name\": \"Social User\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3001/api/auth/social-login",
+              "raw": "http://localhost:3000/api/auth/social-login",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
+              "port": "3000",
               "path": ["api", "auth", "social-login"]
             },
             "description": "Mock endpoint for Social Login (Google, Facebook, Github)"
@@ -150,10 +153,10 @@
               "raw": "{\n  \"grant_type\": \"password\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\",\n  \"username\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3001/oauth/token",
+              "raw": "http://localhost:3000/oauth/token",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
+              "port": "3000",
               "path": ["oauth", "token"]
             },
             "description": "Get access token using password grant (user login)"
@@ -174,10 +177,10 @@
               "raw": "{\n  \"grant_type\": \"client_credentials\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3001/oauth/token",
+              "raw": "http://localhost:3000/oauth/token",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
+              "port": "3000",
               "path": ["oauth", "token"]
             },
             "description": "Get access token using client credentials grant (service-to-service)"
@@ -198,10 +201,10 @@
               "raw": "{\n  \"grant_type\": \"refresh_token\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\",\n  \"refresh_token\": \"{refresh_token}\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3001/oauth/token",
+              "raw": "http://localhost:3000/oauth/token",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
+              "port": "3000",
               "path": ["oauth", "token"]
             },
             "description": "Refresh access token using refresh token"
@@ -231,10 +234,10 @@
               "raw": "{\n  \"token\": \"{access_token}\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3001/oauth/introspect",
+              "raw": "http://localhost:3000/oauth/introspect",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
+              "port": "3000",
               "path": ["oauth", "introspect"]
             },
             "description": "Validate token and get token metadata"
@@ -255,10 +258,10 @@
               "raw": "{\n  \"token\": \"{{access_token}}\",\n  \"token_type_hint\": \"access_token\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3001/oauth/revoke",
+              "raw": "http://localhost:3000/oauth/revoke",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
+              "port": "3000",
               "path": ["oauth", "revoke"]
             },
             "description": "Revoke access token"
@@ -279,10 +282,10 @@
               "raw": "{\n  \"token\": \"{{refresh_token}}\",\n  \"token_type_hint\": \"refresh_token\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3001/oauth/revoke",
+              "raw": "http://localhost:3000/oauth/revoke",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
+              "port": "3000",
               "path": ["oauth", "revoke"]
             },
             "description": "Revoke access token"
@@ -294,22 +297,22 @@
       "name": "Protected Routes",
       "item": [
         {
-          "name": "Get Traffic Data (No Token)",
+          "name": "Get Airquality Data (No Token)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "http://localhost:3001/traffic/data",
+              "raw": "http://localhost:3000/api/airquality/data",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
-              "path": ["traffic", "data"]
+              "port": "3000",
+              "path": ["api", "airquality", "data"]
             },
             "description": "Should return 401 Unauthorized"
           }
         },
         {
-          "name": "Get Traffic Data (With Token)",
+          "name": "Get Airquality Data (With Token)",
           "request": {
             "method": "GET",
             "header": [
@@ -319,11 +322,11 @@
               }
             ],
             "url": {
-              "raw": "http://localhost:3001/traffic/data",
+              "raw": "http://localhost:3001/api/airquality/data",
               "protocol": "http",
               "host": ["localhost"],
               "port": "3001",
-              "path": ["traffic", "data"]
+              "path": ["api", "airquality", "data"]
             },
             "description": "Should return 200 OK via Proxy"
           }
@@ -348,10 +351,10 @@
               "raw": "{\n  \"grant_type\": \"invalid_grant\",\n  \"username\": \"user@example.com\",\n  \"password\": \"password\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3001/oauth/token",
+              "raw": "http://localhost:3000/oauth/token",
               "protocol": "http",
               "host": ["localhost"],
-              "port": "3001",
+              "port": "3000",
               "path": ["oauth", "token"]
             },
             "description": "Request token with unsupported grant type (should get 400)"

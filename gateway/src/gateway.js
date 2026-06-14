@@ -9,7 +9,7 @@ const client = require("prom-client");
 require("dotenv").config();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 const OAUTH_SERVER_URL = process.env.OAUTH_SERVER_URL;
 
 // CORS Configuration
@@ -108,7 +108,7 @@ const loginRateLimiter = rateLimit({
 // ==================== METRICS ====================
 const collectDefaultMetrics = client.collectDefaultMetrics;
 collectDefaultMetrics({ register: client.register });
-app.get("/metrics", async (req, res) => {
+app.get("/api/metrics", async (req, res) => {
   res.set("Content-Type", client.register.contentType);
   res.end(await client.register.metrics());
 });
@@ -248,8 +248,8 @@ app.get("/health", async (req, res) => {
         name: "citizen",
       },
       {
-        url: `${process.env.TRAFFIC_SERVICE_URL || "http://localhost:8001"}/health`,
-        name: "traffic",
+        url: `${process.env.AIRQUALITY_SERVICE_URL || "http://localhost:8001"}/health`,
+        name: "airquality",
       },
       {
         url: `${process.env.ENVIRONMENT_SERVICE_URL || "http://localhost:8002"}/health`,
@@ -383,29 +383,29 @@ const createServiceProxy = (targetUrl) => {
 const protectedMiddleware = [ipRateLimiter, introspectToken, tokenRateLimiter];
 
 app.use(
-  "/citizens",
+  "/api/citizens",
   protectedMiddleware,
   createServiceProxy(process.env.CITIZEN_SERVICE_URL),
 );
 app.use(
-  "/traffic",
+  "/api/airquality",
   protectedMiddleware,
-  createServiceProxy(process.env.TRAFFIC_SERVICE_URL),
+  createServiceProxy(process.env.AIRQUALITY_SERVICE_URL),
 );
 app.use(
-  "/environment",
+  "/api/environment",
   protectedMiddleware,
   createServiceProxy(process.env.ENVIRONMENT_SERVICE_URL),
 );
 app.use(
-  "/ml",
+  "/api/ml",
   protectedMiddleware,
   createServiceProxy(process.env.PYTHON_ML_SERVICE_URL),
 );
 app.use(
-  "/iot/traffic",
+  "/iot/airquality",
   protectedMiddleware,
-  createServiceProxy(process.env.TRAFFIC_SERVICE_URL),
+  createServiceProxy(process.env.AIRQUALITY_SERVICE_URL),
 );
 app.use(
   "/iot/air",
