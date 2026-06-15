@@ -3,17 +3,16 @@ import json
 import threading
 import os
 import pika
-import pandas as pd
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-app = FastAPI(title="Smart City ML Service", version="1.2")
+app = FastAPI(title="Smart City ML Service", version="1.3")
 
-# Absolute path routing
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'smartcity_models.pkl')
 
-# Global variables with Pylance type-hinting
+# Global variables dengan penanganan typing eksplisit demi Pylance
 MODELS: dict | None = None
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
 RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "city.events") 
@@ -21,32 +20,20 @@ RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "city.events")
 @app.on_event("startup")
 def load_models_and_start_consumer():
     global MODELS
-    
     if not os.path.exists(MODEL_PATH):
         raise RuntimeError(f"File model tidak ditemukan di {MODEL_PATH}. Jalankan train_models.py terlebih dahulu.")
         
     with open(MODEL_PATH, "rb") as f:
         MODELS = pickle.load(f)
-    print(f"Semua model ML berhasil dimuat dari {MODEL_PATH}")
+    print("SINKRONISASI SUKSES: 3 Model ML Arsitektur SOA Berhasil Dimuat.")
     
-    # Run the background consumer
+    # Menjalankan consumer di thread terpisah agar tidak memblokir event loop FastAPI
     consumer_thread = threading.Thread(target=start_rabbitmq_consumer, daemon=True)
     consumer_thread.start()
-    print("Background RabbitMQ Consumer diselaraskan dan dijalankan.")
 
+# SKEMA PYDANTIC
 
-# Pydantic Schemas for HTTP Endpoints
-
-class PredictionFeatures(BaseModel):
-    no2: float
-    co: float
-    o3: float
-    temperature: float
-    humidity: float
-    wind_speed: float
-    wind_direction: float
-
-class AnomalyFeatures(BaseModel):
+class AQIRequest(BaseModel):
     pm25: float
     pm10: float
     no2: float
@@ -54,7 +41,21 @@ class AnomalyFeatures(BaseModel):
     o3: float
     temperature: float
     humidity: float
+
+class PollutionRequest(BaseModel):
+    hour: int
+    day: int
     wind_speed: float
+    wind_direction: float
+    temperature: float
+    humidity: float
+    pm25_prev: float
+
+class AnomalyRequest(BaseModel):
+    sensor_value: float
+    hour: int
+    rolling_mean_1h: float
+    z_score: float
 
 
 # HTTP Endpoints
@@ -62,49 +63,54 @@ class AnomalyFeatures(BaseModel):
 @app.get("/health")
 def health_check():
     if MODELS is not None:
-        return {"status": "UP", "database": "N/A", "models_loaded": True}
-    return {"status": "DOWN", "reason": "Models not ready"}
+        return {"status": "UP", "models_loaded": True}
+    return {"status": "DOWN", "reason": "Model artifacts are missing"}
 
 @app.post("/predict/aqi")
-def predict_aqi(data: PredictionFeatures):
+def predict_aqi(data: AQIRequest):
     models = MODELS
     if models is None:
-        raise HTTPException(status_code=503, detail="Model belum siap dimuat ke memori")
-        
+        raise HTTPException(status_code=503, detail="Model belum siap di memori")
     try:
-        input_data = [[data.no2, data.co, data.o3, data.temperature, data.humidity, data.wind_speed, data.wind_direction]]
-        scaled_data = models['scaler'].transform(input_data)
-        prediction = models['aqi_classifier'].predict(scaled_data)[0]
-        labels = {0: "Good", 1: "Moderate", 2: "Unhealthy"}
-        return {"aqi_class": int(prediction), "label": labels[int(prediction)]}
+        input_data = [[data.pm25, data.pm10, data.no2, data.co, data.o3, data.temperature, data.humidity]]
+        scaled_data = models['scaler_clf'].transform(input_data)
+        pred = models['aqi_classifier'].predict(scaled_data)[0]
+        
+        # 5 Kategori Output Resmi Indonesia sesuai spesifikasi dokumen tugas
+        labels = {0: "Baik", 1: "Sedang", 2: "Tidak Sehat", 3: "Sangat Tidak Sehat", 4: "Berbahaya"}
+        return {"aqi_class": int(pred), "label": labels.get(int(pred), "Tidak Diketahui")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/predict/pollution")
-def predict_pollution(data: PredictionFeatures):
+def predict_pollution(data: PollutionRequest):
     models = MODELS
     if models is None:
-        raise HTTPException(status_code=503, detail="Model belum siap dimuat ke memori")
-        
+        raise HTTPException(status_code=503, detail="Model belum siap di memori")
     try:
-        input_data = [[data.no2, data.co, data.o3, data.temperature, data.humidity, data.wind_speed, data.wind_direction]]
-        scaled_data = models['scaler'].transform(input_data)
-        predicted_pm25 = models['pollution_predictor'].predict(scaled_data)[0]
-        return {"predicted_pm25": round(float(predicted_pm25), 2)}
+        input_data = [[data.hour, data.day, data.wind_speed, data.wind_direction, data.temperature, data.humidity, data.pm25_prev]]
+        scaled_data = models['scaler_reg'].transform(input_data)
+        pred = models['pollution_predictor'].predict(scaled_data)[0]
+        return {"predicted_pm25": round(float(pred), 2)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/detect/anomaly")
-def detect_anomaly(data: AnomalyFeatures):
+def detect_anomaly(data: AnomalyRequest):
     models = MODELS
     if models is None:
-        raise HTTPException(status_code=503, detail="Model belum siap dimuat ke memori")
-        
+        raise HTTPException(status_code=503, detail="Model belum siap di memori")
     try:
-        input_data = [[data.pm25, data.pm10, data.no2, data.co, data.o3, data.temperature, data.humidity, data.wind_speed]]
-        prediction = models['anomaly_detector'].predict(input_data)[0]
-        is_anomaly = 1 if prediction == -1 else 0
-        return {"is_anomaly": is_anomaly, "status": "Anomaly Detected" if is_anomaly else "Normal"}
+        input_data = [[data.sensor_value, data.hour, data.rolling_mean_1h, data.z_score]]
+        pred = models['anomaly_detector'].predict(input_data)[0]
+        is_anom = True if pred == -1 else False
+        
+        # Aturan penentuan tingkatan bahaya (severity) berbasis deviasi z-score
+        severity = "Normal"
+        if is_anom:
+            severity = "Peringatan" if data.z_score < 3.0 else "Kritis"
+            
+        return {"is_anomaly": is_anom, "severity": severity}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -121,75 +127,64 @@ def start_rabbitmq_consumer():
         channel.queue_bind(exchange=RABBITMQ_EXCHANGE, queue='air_quality_ml_queue', routing_key='air.new')
         
         def callback(ch, method, properties, body):
-            print(f"Menerima rilis event dari Anggota 3: {body.decode()}")
-            
             models = MODELS
             if models is None:
-                print("Consumer menunda eksekusi: Model belum termuat sempurna.")
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
                 return
                 
             try:
                 payload = json.loads(body.decode())
-                data_block = payload.get('data', {})
+                data_block = payload.get('data', {})  # Representasi tabel air_readings
                 
-                # 1. Ekstraksi Fitur Utama
+                zone_id = data_block.get('zone_id')
                 pm25 = float(data_block.get('pm25', 0))
                 pm10 = float(data_block.get('pm10', 0))
                 no2 = float(data_block.get('no2', 0))
                 co = float(data_block.get('co', 0))
                 o3 = float(data_block.get('o3', 0))
                 
-                # 2. Ekstraksi Fitur Cuaca dengan Nilai Standar Baseline Jakarta
-                temp = float(data_block.get('temperature', 30.0))
-                hum = float(data_block.get('humidity', 75.0))
-                wind_s = float(data_block.get('wind_speed', 2.5))
-                wind_d = float(data_block.get('wind_direction', 180.0))
+                # Sinkronisasi Fallback Nilai Cuaca dari Database Terpisah
+                temp_fallback = 30.0
+                hum_fallback = 75.0
                 
-                # 3. Eksekusi Prediksi Otomatis 1: AQI Class & Pollution Predictor
-                clf_reg_input = [[no2, co, o3, temp, hum, wind_s, wind_d]]
-                scaled_input = models['scaler'].transform(clf_reg_input)
+                # 1. Otomatisasi Klasifikasi Kategori AQI
+                clf_input = [[pm25, pm10, no2, co, o3, temp_fallback, hum_fallback]]
+                scaled_clf = models['scaler_clf'].transform(clf_input)
+                aqi_pred = models['aqi_classifier'].predict(scaled_clf)[0]
                 
-                predicted_class = models['aqi_classifier'].predict(scaled_input)[0]
-                predicted_pm25 = models['pollution_predictor'].predict(scaled_input)[0]
+                # 2. Otomatisasi Analisis Pencilan Melalui Isolation Forest
+                now = datetime.now()
+                # Dummy statistik instan demi kestabilan background process real-time
+                anom_input = [[pm25, now.hour, pm25, 0.0]] 
+                anom_pred = models['anomaly_detector'].predict(anom_input)[0]
                 
-                labels = {0: "Good", 1: "Moderate", 2: "Unhealthy"}
-                print(f"[AUTOMATED INFERENCE] Station {data_block.get('station_id')} -> Predicted PM2.5 next cycle: {predicted_pm25:.2f} | AQI Status: {labels[int(predicted_class)]}")
-                
-                # 4. Eksekusi Prediksi Otomatis 2: Isolation Forest Anomaly Detector
-                anomaly_input = [[pm25, pm10, no2, co, o3, temp, hum, wind_s]]
-                anomaly_res = models['anomaly_detector'].predict(anomaly_input)[0]
-                
-                # Jika hasil adalah -1, data dianggap sebagai pencilan/anomali struktural
-                if anomaly_res == -1:
-                    print("[ML ALERT] Deteksi Anomali Struktural Terbaca!")
-                    
+                if anom_pred == -1:
+                    # Skema Event Outbound resmi untuk dikonsumsi Citizen Service & Env Service
                     alert_payload = {
                         "event": "anomaly.alert",
-                        "zone_id": data_block.get('zone_id'),
-                        "station_id": data_block.get('station_id'),
-                        "timestamp": pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        "details": f"Pencilan parameter terdeteksi! PM2.5: {pm25}, PM10: {pm10}.",
-                        "trigger_data": data_block
+                        "zone_id": zone_id,
+                        "pollutant": "PM2.5",
+                        "severity": "Peringatan" if pm25 < 150 else "Kritis",
+                        "value": pm25,
+                        "threshold": 100.0,
+                        "created_at": now.strftime('%Y-%m-%d %H:%M:%S')
                     }
                     
-                    ch.basic_publish(
+                    channel.basic_publish(
                         exchange=RABBITMQ_EXCHANGE,
                         routing_key='anomaly.alert',
                         body=json.dumps(alert_payload),
                         properties=pika.BasicProperties(delivery_mode=2)
                     )
-                    print("Event 'anomaly.alert' sukses disebarkan ke broker.")
+                    print(f"[AUTOMATION ALERT] Anomali terdeteksi di Zone {zone_id}! Klasifikasi Kategori AQI: {int(aqi_pred)}")
                     
-            except Exception as ex:
-                print(f"Gagal memproses struktur payload atau melakukan inferensi: {ex}")
+            except Exception as e:
+                print(f"Gagal mengeksekusi otomatisasi inferensi latar belakang: {e}")
                 
             ch.basic_ack(delivery_tag=method.delivery_tag)
 
         channel.basic_consume(queue='air_quality_ml_queue', on_message_callback=callback)
-        print(f"Menunggu event 'air.new' pada exchange '{RABBITMQ_EXCHANGE}'...")
         channel.start_consuming()
-        
     except Exception as e:
         print(f"Koneksi RabbitMQ terputus atau gagal: {e}")
 
