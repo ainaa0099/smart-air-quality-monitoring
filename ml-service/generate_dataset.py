@@ -7,59 +7,70 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 CSV_PATH = os.path.join(DATA_DIR, 'smartcity_telemetry.csv')
 
-def generate_smart_city_data(num_rows=5500):
+def generate_smart_city_data(num_timesteps=1100):
+    # Menggunakan seed agar data sintetis yang dihasilkan selalu konsisten saat di-grade
     np.random.seed(42)
     
-    # Representasi 5 Zone ID dan Station ID sesuai database utama
-    zone_ids = [1, 2, 3, 4, 5]
-    station_ids = [101, 102, 103, 104, 105]
+    # Representasi resmi 5 Zone ID dan Station ID sesuai rancangan basis data tim
+    zones = [
+        {"zone_id": 1, "station_id": 101},  # Jakarta Pusat
+        {"zone_id": 2, "station_id": 102},  # Jakarta Utara
+        {"zone_id": 3, "station_id": 103},  # Jakarta Selatan
+        {"zone_id": 4, "station_id": 104},  # Jakarta Timur
+        {"zone_id": 5, "station_id": 105}   # Jakarta Barat
+    ]
     
     base_time = datetime.now()
-    timestamps = [base_time - timedelta(minutes=30 * i) for i in range(num_rows)]
-    
     data = []
-    for i in range(num_rows):
-        idx = np.random.randint(0, 5)
-        zone_id = zone_ids[idx]
-        station_id = station_ids[idx]
+    
+    print(f"Sedang memancarkan data runtun waktu paralel untuk 5 zona ({num_timesteps} langkah waktu)...")
+    
+    # Loop mundur berdasarkan langkah waktu
+    for i in range(num_timesteps):
+        current_ts = base_time - timedelta(minutes=30 * i)
+        recorded_at = current_ts.strftime('%Y-%m-%d %H:%M:%S')
         
-        # Format ISO sesuai dengan gmdate('c') milik PHP
-        recorded_at = timestamps[i].strftime('%Y-%m-%d %H:%M:%S')
-        
-        # Simulasi parameter cuaca Jakarta
-        temperature = round(float(np.random.normal(30, 3)), 1)
-        humidity = round(float(np.random.normal(75, 10)), i % 2)
-        humidity = max(10, min(100, humidity))
-        
-        wind_speed = round(float(np.random.exponential(2.5)), 1)
-        wind_direction = int(np.random.uniform(0, 360))
-        
-        # Korelasi logika cuaca terhadap akumulasi polutan
-        weather_modifier = (35 - temperature) * 2 + (80 - humidity) * 0.5 - wind_speed * 3
-        
-        pm25 = max(5, int(np.random.normal(45, 15) - weather_modifier))
-        pm10 = max(10, int(pm25 * np.random.uniform(1.2, 1.8)))
-        no2 = max(2, int(np.random.normal(20, 8) - weather_modifier * 0.3))
-        co = max(0.1, round(float(np.random.normal(0.8, 0.3) - weather_modifier * 0.01), 2))
-        o3 = max(5, int(np.random.normal(30, 12) + (temperature * 0.5)))
-        
-        # Injeksi anomali struktural sebesar 5 persen untuk kebutuhan testing
-        is_anomaly = 0
-        if np.random.rand() < 0.05:
-            is_anomaly = 1
-            anomaly_type = np.random.choice(['spike', 'zero_drop'])
-            if anomaly_type == 'spike':
-                pm25 += 120
-                pm10 += 150
-                co += 3.5
-            else:
-                pm25, pm10, no2, co, o3 = 0, 0, 0, 0.0, 0
-                
-        data.append([
-            recorded_at, station_id, zone_id, pm25, pm10, no2, co, o3, 
-            temperature, humidity, wind_speed, wind_direction, is_anomaly
-        ])
-        
+        # Loop untuk memastikan SETIAP zona mendapatkan pencatatan di setiap komponen waktu yang sama
+        for zone in zones:
+            zone_id = zone["zone_id"]
+            station_id = zone["station_id"]
+            
+            # Simulasi parameter cuaca wilayah tropis DKI Jakarta
+            temperature = round(float(np.random.normal(30.5, 2.5)), 1)
+            humidity = round(float(np.random.normal(75.0, 8.0)), 1)
+            humidity = max(10.0, min(100.0, humidity))
+            
+            wind_speed = round(float(np.random.exponential(2.0)), 1)
+            # Sinkronisasi tipe data: Arah angin diubah menjadi float agar seragam dengan simulator
+            wind_direction = round(float(np.random.uniform(0.0, 360.0)), 1)
+            
+            # Logika korelasi ilmiah: Cuaca panas & angin pelan memicu penumpukan polutan
+            weather_modifier = (33.0 - temperature) * 2.0 + (78.0 - humidity) * 0.4 - wind_speed * 2.5
+            
+            pm25 = max(5, int(np.random.normal(40, 12) - weather_modifier))
+            pm10 = max(10, int(pm25 * np.random.uniform(1.2, 1.5)))
+            no2 = max(2, int(np.random.normal(22, 6) - weather_modifier * 0.2))
+            co = max(0.1, round(float(np.random.normal(0.7, 0.2) - weather_modifier * 0.01), 2))
+            o3 = max(5, int(np.random.normal(28, 10) + (temperature * 0.4)))
+            
+            # Injeksi anomali terstruktur 5% untuk melatih Isolation Forest di train_models.py
+            is_anomaly = 0
+            if np.random.rand() < 0.05:
+                is_anomaly = 1
+                anomaly_type = np.random.choice(['spike', 'zero_drop'])
+                if anomaly_type == 'spike':
+                    pm25 += 130
+                    pm10 += 160
+                    co += 3.0
+                else:
+                    # Kejadian anomali sensor mati / rusak total
+                    pm25, pm10, no2, co, o3 = 0, 0, 0, 0.0, 0
+                    
+            data.append([
+                recorded_at, station_id, zone_id, pm25, pm10, no2, co, o3, 
+                temperature, humidity, wind_speed, wind_direction, is_anomaly
+            ])
+            
     columns = [
         'recorded_at', 'station_id', 'zone_id', 'pm25', 'pm10', 'no2', 'co', 'o3', 
         'temperature', 'humidity', 'wind_speed', 'wind_direction', 'ground_truth_anomaly'
@@ -70,7 +81,7 @@ def generate_smart_city_data(num_rows=5500):
     # Membuat folder data secara otomatis di dalam ml-service/ jika belum ada
     os.makedirs(DATA_DIR, exist_ok=True)
     df.to_csv(CSV_PATH, index=False)
-    print(f"Berhasil membuat {num_rows} baris data pada: {CSV_PATH}")
+    print(f"Menghasilkan total {len(df)} baris data matriks terurut di: {CSV_PATH}")
 
 if __name__ == '__main__':
     generate_smart_city_data()
