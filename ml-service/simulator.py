@@ -17,27 +17,35 @@ def on_connect(client, userdata, flags, rc, *args):
         print(f"Gagal terhubung ke MQTT Broker, kode status: {rc}")
 
 def generate_zone_reading(zone_id, station_id):
-    # Simulasi baseline parameter cuaca dan polusi DKI Jakarta secara acak terikat
-    temperature = round(random.uniform(27.0, 34.0), 1)
-    humidity = round(random.uniform(65.0, 85.0), 1)
-    wind_speed = round(random.uniform(0.5, 5.5), 1)
+    # Simulasi kondisi cuaca Jakarta menggunakan Distribusi Gauss agar sesuai dataset training
+    temperature = round(random.normalvariate(30.5, 2.0), 1)
+    humidity = round(random.normalvariate(75.0, 6.0), 1)
+    humidity = max(10.0, min(100.0, humidity))
     
-    # Sinkronisasi tipe data: Mengubah arah angin menjadi float (0.0 - 360.0 derajat)
+    wind_speed = round(random.expovariate(1.0 / 2.0), 1) # Mean wind speed 2.0 m/s
     wind_direction = round(random.uniform(0.0, 360.0), 1)
     
-    # Perhitungan polutan dasar
-    pm25 = random.randint(15, 95)
-    pm10 = int(pm25 * random.uniform(1.2, 1.6))
-    no2 = random.randint(10, 45)
-    co = round(random.uniform(0.4, 1.9), 2)
-    o3 = random.randint(15, 60)
+    # Korelasi ilmiah cuaca terhadap polutan
+    weather_modifier = (33.0 - temperature) * 2.0 + (78.0 - humidity) * 0.4 - wind_speed * 2.5
     
-    # Injeksi data anomali buatan (peluang 3%) untuk menguji Isolation Forest di app.py
-    if random.random() < 0.03:
-        pm25 += 140
-        pm10 += 170
-        co += 3.5
-        print(f"[SIMULATOR ALERT] Injeksi data anomali buatan pada Zone {zone_id}")
+    pm25 = max(5, int(random.normalvariate(40, 10) - weather_modifier))
+    pm10 = max(10, int(pm25 * random.uniform(1.2, 1.4)))
+    no2 = max(2, int(random.normalvariate(22, 5) - weather_modifier * 0.2))
+    co = max(0.1, round(random.normalvariate(0.7, 0.15) - weather_modifier * 0.01, 2))
+    o3 = max(5, int(random.normalvariate(28, 8) + (temperature * 0.4)))
+    
+    # Injeksi Dua Jenis Anomali Terstruktur (Peluang 4% total)
+    if random.random() < 0.04:
+        anomaly_type = random.choice(['spike', 'zero_drop'])
+        if anomaly_type == 'spike':
+            pm25 += 130
+            pm10 += 160
+            co += 3.0
+            print(f"[SIMULATOR ALERT] Injeksi Anomali 'Spike' pada Zone {zone_id} ({station_id})")
+        else:
+            # Kegagalan hardware / sensor offline mendadak
+            pm25, pm10, no2, co, o3 = 0, 0, 0, 0.0, 0
+            print(f"[SIMULATOR ALERT] Injeksi Anomali 'Zero-Drop' (Sensor Mati) pada Zone {zone_id} ({station_id})")
 
     return {
         "station_id": station_id,
@@ -55,9 +63,8 @@ def generate_zone_reading(zone_id, station_id):
     }
 
 def start_simulator():
-    # Menggunakan getattr secara dinamis untuk mengelabui pengecekan statis Pylance
+    # Mengamankan kompatibilitas paho-mqtt v1.x dan v2.x secara dinamis
     callback_api_enum = getattr(mqtt, "CallbackAPIVersion", None)
-    
     if callback_api_enum is not None:
         version_value = getattr(callback_api_enum, "VERSION1")
         client = mqtt.Client(callback_api_version=version_value)
@@ -69,30 +76,35 @@ def start_simulator():
     try:
         client.connect(MQTT_HOST, MQTT_PORT, 60)
     except Exception as e:
-        print(f"Koneksi ke broker MQTT gagal: {e}")
-        print("Pastikan MQTT Broker (Mosquitto) sudah berjalan.")
+        print(f"Koneksi ke broker MQTT gagal: {e}. Pastikan Mosquitto aktif!")
         return
 
-    # Definisi 5 Zona DKI Jakarta sesuai instruksi tugas Anggota 5
+    # Realignment Zone ID agar sinkron 100% dengan rancangan database utama kelompok
     zones = [
-        {"zone_id": 1, "station_id": 101}, # Jakarta Pusat
-        {"zone_id": 2, "station_id": 102}, # Jakarta Utara
-        {"zone_id": 3, "station_id": 103}, # Jakarta Timur
-        {"zone_id": 4, "station_id": 104}, # Jakarta Selatan
-        {"zone_id": 5, "station_id": 105}  # Jakarta Barat
+        {"zone_id": 1, "station_id": 101},  # Jakarta Pusat
+        {"zone_id": 2, "station_id": 102},  # Jakarta Utara
+        {"zone_id": 3, "station_id": 103},  # Jakarta Selatan
+        {"zone_id": 4, "station_id": 104},  # Jakarta Timur
+        {"zone_id": 5, "station_id": 105}   # Jakarta Barat
     ]
 
-    print("Memulai pengiriman data telemetri IoT (Interval: 30 detik)...")
+    print("Memulai pemancaran telemetri IoT berstandar industri (Interval: 30 detik)...")
     client.loop_start()
     
     try:
         while True:
             for zone in zones:
-                payload = generate_zone_reading(zone["zone_id"], zone["station_id"])
-                json_payload = json.dumps(payload)
+                telemetry_data = generate_zone_reading(zone["zone_id"], zone["station_id"])
                 
+                # SINKRONISASI BUNGKUS PAYLOAD: Dibungkus ke dalam objek 'data' agar terbaca oleh app.py
+                wrapped_payload = {
+                    "event": "telemetry.recorded",
+                    "data": telemetry_data
+                }
+                
+                json_payload = json.dumps(wrapped_payload)
                 client.publish(MQTT_TOPIC, json_payload, qos=1)
-                print(f"Sent Telemetry -> Zone {zone['zone_id']} | PM2.5: {payload['pm25']} | Wind Dir: {payload['wind_direction']}°")
+                print(f"Broadcast -> Zone {zone['zone_id']} | PM2.5: {telemetry_data['pm25']} | Temp: {telemetry_data['temperature']}°C")
                 
             time.sleep(30)
             
