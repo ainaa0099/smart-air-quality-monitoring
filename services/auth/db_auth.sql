@@ -93,6 +93,25 @@ CREATE TABLE IF NOT EXISTS oauth_authorization_codes (
   INDEX idx_expires_at (expires_at)
 );
 
+CREATE TABLE IF NOT EXISTS login_logs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  login_method VARCHAR(50) NOT NULL COMMENT 'password, oauth',
+  provider VARCHAR(50) DEFAULT NULL COMMENT 'google, github, facebook',
+  ip_address VARCHAR(45) NOT NULL,
+  city VARCHAR(100),
+  region VARCHAR(100),
+  country VARCHAR(100),
+  loc VARCHAR(100),
+  timezone VARCHAR(100),
+  org VARCHAR(255),
+  user_agent TEXT,
+  login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_user_id (user_id),
+  INDEX idx_login_at (login_at)
+);
+
 -- Default Admin User (optional)
 INSERT IGNORE INTO users (name, email, password, role, oauth_provider) VALUES
 ('Admin', 'admin@smartcity.local', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcg7b3XeKeUxWdeS86E36gZvQOm', 'admin', 'local');

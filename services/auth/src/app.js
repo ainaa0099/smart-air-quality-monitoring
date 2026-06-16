@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const db = require("./config/database");
 const client = require("prom-client");
 const axios = require("axios");
+const { recordLoginLocation } = require("./services/authLogService");
 require("dotenv").config();
 
 const app = express();
@@ -16,6 +17,9 @@ const JWT_ACCESS_EXPIRES = process.env.JWT_ACCESS_EXPIRES || "15m";
 const JWT_REFRESH_SECRET =
   process.env.JWT_REFRESH_SECRET || "refresh-secret-key";
 const JWT_REFRESH_EXPIRES = process.env.JWT_REFRESH_EXPIRES || "7d";
+
+// ==================== KONFIGURASI ====================
+app.set("trust proxy", true); // Membaca IP client yang sebenarnya di belakang proxy
 
 app.use(
   cors({
@@ -211,6 +215,9 @@ app.post("/oauth/token", async (req, res) => {
       );
 
       connection.release();
+
+      // Catat log lokasi (tidak memblokir eksekusi)
+      recordLoginLocation(req, user.id, "password", null);
 
       return res.status(200).json({
         status: "success",
@@ -616,6 +623,9 @@ app.post("/login", async (req, res) => {
 
     connection.release();
 
+    // Catat log lokasi (tidak memblokir eksekusi)
+    recordLoginLocation(req, user.id, "password", null);
+
     return res.status(200).json({
       status: "success",
       code: 200,
@@ -840,6 +850,7 @@ app.get("/callback/google", async (req, res) => {
 
     const user = await findOrCreateSocialUser(profileData);
     const tokens = await issueInternalTokens(user);
+    recordLoginLocation(req, user.id, "oauth", "google");
     handleSocialCallbackResponse(res, stateData, profileData, tokens);
   } catch (err) {
     console.error("Google OAuth Error:", err.response?.data || err.message);
@@ -905,6 +916,7 @@ app.get("/callback/github", async (req, res) => {
 
     const user = await findOrCreateSocialUser(profileData);
     const tokens = await issueInternalTokens(user);
+    recordLoginLocation(req, user.id, "oauth", "github");
     handleSocialCallbackResponse(res, stateData, profileData, tokens);
   } catch (err) {
     console.error("GitHub OAuth Error:", err.response?.data || err.message);
@@ -966,6 +978,7 @@ app.get("/callback/facebook", async (req, res) => {
 
     const user = await findOrCreateSocialUser(profileData);
     const tokens = await issueInternalTokens(user);
+    recordLoginLocation(req, user.id, "oauth", "facebook");
     handleSocialCallbackResponse(res, stateData, profileData, tokens);
   } catch (err) {
     console.error("Facebook OAuth Error:", err.response?.data || err.message);
