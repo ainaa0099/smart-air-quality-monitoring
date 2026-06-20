@@ -47,11 +47,11 @@ def generate_smart_city_data(num_timesteps=1100):
             # Logika korelasi ilmiah: Cuaca panas & angin pelan memicu penumpukan polutan
             weather_modifier = (33.0 - temperature) * 2.0 + (78.0 - humidity) * 0.4 - wind_speed * 2.5
             
-            pm25 = max(5, int(np.random.normal(40, 12) - weather_modifier))
-            pm10 = max(10, int(pm25 * np.random.uniform(1.2, 1.5)))
-            no2 = max(2, int(np.random.normal(22, 6) - weather_modifier * 0.2))
+            pm25 = max(2, int(np.random.normal(40, 12) - weather_modifier))
+            pm10 = max(5, int(pm25 * np.random.uniform(1.2, 1.5)))
+            no2 = max(1, int(np.random.normal(22, 6) - weather_modifier * 0.2))
             co = max(0.1, round(float(np.random.normal(0.7, 0.2) - weather_modifier * 0.01), 2))
-            o3 = max(5, int(np.random.normal(28, 10) + (temperature * 0.4)))
+            o3 = max(2, int(np.random.normal(28, 10) + (temperature * 0.4)))
             
             # Injeksi anomali terstruktur 5% untuk melatih Isolation Forest di train_models.py
             is_anomaly = 0
@@ -59,9 +59,13 @@ def generate_smart_city_data(num_timesteps=1100):
                 is_anomaly = 1
                 anomaly_type = np.random.choice(['spike', 'zero_drop'])
                 if anomaly_type == 'spike':
-                    pm25 += 130
-                    pm10 += 160
-                    co += 3.0
+                    pm25 += int(np.random.uniform(100, 150))
+                    pm10 += int(np.random.uniform(120, 180))
+                    co += round(np.random.uniform(2.0, 4.0), 2)
+                    print(f"[SIMULATOR ALERT] Injeksi Anomali 'Spike' pada Zone {zone_id} ({station_id})")
+                elif anomaly_type == 'zero_drop':
+                    pm25, pm10, no2, co, o3 = 0, 0, 0, 0.0, 0
+                    print(f"[SIMULATOR ALERT] Injeksi Anomali 'Zero-Drop' (Sensor Mati) pada Zone {zone_id} ({station_id})")
                 else:
                     # Kejadian anomali sensor mati / rusak total
                     pm25, pm10, no2, co, o3 = 0, 0, 0, 0.0, 0
