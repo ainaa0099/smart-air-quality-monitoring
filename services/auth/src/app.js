@@ -6,7 +6,8 @@ const crypto = require("crypto");
 const db = require("./config/database");
 const client = require("prom-client");
 const axios = require("axios");
-const { recordLoginLocation } = require("./services/authLogService");
+const { recordLoginLocation } = require("../authLogService");
+const { getLocationFromIp } = require("../locationService");
 require("dotenv").config();
 
 const app = express();
@@ -626,6 +627,9 @@ app.post("/login", async (req, res) => {
     // Catat log lokasi (tidak memblokir eksekusi)
     recordLoginLocation(req, user.id, "password", null);
 
+    // 2. Dapatkan data lokasi untuk disertakan dalam respons
+    const locationData = await getLocationFromIp(req.ip);
+
     return res.status(200).json({
       status: "success",
       code: 200,
@@ -639,6 +643,8 @@ app.post("/login", async (req, res) => {
         access_token: accessToken,
         refresh_token: refreshToken,
         token_type: "Bearer",
+        // 3. Tambahkan data lokasi ke dalam respons
+        location: locationData || { info: "Location could not be determined." },
       },
       message: "Login successful",
       timestamp: new Date().toISOString(),

@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
-const rateLimit = require("express-rate-limit");
+const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const jwt = require("jsonwebtoken");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const axios = require("axios");
@@ -55,7 +55,7 @@ app.use((req, res, next) => {
 const ipRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // 100 requests per windowMs
-  keyGenerator: (req, res) => req.ip,
+  keyGenerator: ipKeyGenerator,
   handler: (req, res) => {
     res.status(429).json({
       status: "error",
@@ -74,7 +74,8 @@ const ipRateLimiter = rateLimit({
 const tokenRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 60 minutes
   max: 500, // 500 requests per windowMs for authenticated users
-  keyGenerator: (req, res) => req.user?.sub || req.user?.id || req.ip,
+  keyGenerator: (req, res) =>
+    req.user?.sub || req.user?.id || ipKeyGenerator(req),
   handler: (req, res) => {
     res.status(429).json({
       status: "error",
@@ -93,7 +94,8 @@ const tokenRateLimiter = rateLimit({
 const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // 10 login attempts per windowMs
-  keyGenerator: (req, res) => req.body.username || req.body.email || req.ip,
+  keyGenerator: (req, res) =>
+    req.body.username || req.body.email || ipKeyGenerator(req),
   handler: (req, res) => {
     res.status(429).json({
       status: "error",
