@@ -24,6 +24,14 @@ const createLoginLog = async (data) => {
   const connection = await db.getConnection();
   await connection.query(query, values);
   connection.release();
+  try {
+  } catch (error) {
+    console.error(
+      "[Login Log Service] Failed to create login log:",
+      error.message,
+    );
+    throw error;
+  }
 };
 
 module.exports = { createLoginLog };
