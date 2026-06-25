@@ -17,6 +17,13 @@ def create_targets_and_train():
         raise FileNotFoundError(f"File data tidak ditemukan di {CSV_PATH}. Jalankan generate_dataset.py terlebih dahulu.")
         
     df = pd.read_csv(CSV_PATH)
+
+    df['future_pm25'] = (
+    df.groupby('zone_id')['pm25']
+      .shift(-1)
+    )
+
+    df = df.dropna(subset=['future_pm25'])
     
     # 1. Mengurutkan data berdasarkan Zona dan Waktu demi integritas Time-Series
     df['recorded_at'] = pd.to_datetime(df['recorded_at'])
@@ -75,7 +82,7 @@ def create_targets_and_train():
     # --- MODEL 2: POLLUTION PREDICTOR (Random Forest Regressor) ---
     reg_features = ['hour', 'day', 'wind_speed', 'wind_direction', 'temperature', 'humidity', 'pm25_prev']
     X_reg = df[reg_features]
-    y_reg = df['pm25']
+    y_reg = df['future_pm25']
     
     X_train_r, X_test_r, y_train_r, y_test_r = train_test_split(X_reg, y_reg, test_size=0.2, random_state=42)
     

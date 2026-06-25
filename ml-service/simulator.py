@@ -8,7 +8,6 @@ import paho.mqtt.client as mqtt
 # Konfigurasi MQTT Broker dari environment variable atau default localhost
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", 1883))
-MQTT_TOPIC = "city/air/telemetry"
 
 def on_connect(client, userdata, flags, rc, *args):
     if rc == 0:
@@ -22,7 +21,7 @@ def generate_zone_reading(zone_id, station_id):
     humidity = round(random.normalvariate(75.0, 6.0), 1)
     humidity = max(10.0, min(100.0, humidity))
     
-    wind_speed = round(random.expovariate(1.0 / 2.0), 1) # Mean wind speed 2.0 m/s
+    wind_speed = round(random.expovariate(1.0 / 2.0), 1)
     wind_direction = round(random.uniform(0.0, 360.0), 1)
     
     # Korelasi ilmiah cuaca terhadap polutan
@@ -38,16 +37,18 @@ def generate_zone_reading(zone_id, station_id):
     if random.random() < 0.04:
         anomaly_type = random.choice(['spike', 'zero_drop'])
         if anomaly_type == 'spike':
-            pm25 += 130
-            pm10 += 160
-            co += 3.0
+            pm25 += int(random.uniform(100, 150))
+            pm10 += int(random.uniform(120, 180))
+            co += round(random.uniform(2.0, 4.0), 2)
             print(f"[SIMULATOR ALERT] Injeksi Anomali 'Spike' pada Zone {zone_id} ({station_id})")
         else:
-            # Kegagalan hardware / sensor offline mendadak
             pm25, pm10, no2, co, o3 = 0, 0, 0, 0.0, 0
             print(f"[SIMULATOR ALERT] Injeksi Anomali 'Zero-Drop' (Sensor Mati) pada Zone {zone_id} ({station_id})")
 
-    return {
+    recorded_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # SPLIT: Air Quality Payload
+    air_payload = {
         "station_id": station_id,
         "zone_id": zone_id,
         "pm25": pm25,
@@ -55,19 +56,26 @@ def generate_zone_reading(zone_id, station_id):
         "no2": no2,
         "co": co,
         "o3": o3,
+        "recorded_at": recorded_at
+    }
+
+    # SPLIT: Weather Payload
+    weather_payload = {
+        "station_id": station_id,
+        "zone_id": zone_id,
         "temperature": temperature,
         "humidity": humidity,
         "wind_speed": wind_speed,
         "wind_direction": wind_direction,
-        "recorded_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        "recorded_at": recorded_at
     }
 
+    return air_payload, weather_payload
+
 def start_simulator():
-    # Mengamankan kompatibilitas paho-mqtt v1.x dan v2.x secara dinamis
     callback_api_enum = getattr(mqtt, "CallbackAPIVersion", None)
     if callback_api_enum is not None:
-        version_value = getattr(callback_api_enum, "VERSION1")
-        client = mqtt.Client(callback_api_version=version_value)
+        client = mqtt.Client(callback_api_version=getattr(callback_api_enum, "VERSION1"))
     else:
         client = mqtt.Client()
         
@@ -76,10 +84,9 @@ def start_simulator():
     try:
         client.connect(MQTT_HOST, MQTT_PORT, 60)
     except Exception as e:
-        print(f"Koneksi ke broker MQTT gagal: {e}. Pastikan Mosquitto aktif!")
+        print(f"Koneksi ke broker MQTT gagal: {e}. Pastikan Mosquitto aktif di {MQTT_HOST}:{MQTT_PORT}.")
         return
 
-    # Realignment Zone ID agar sinkron 100% dengan rancangan database utama kelompok
     zones = [
         {"zone_id": 1, "station_id": 101},  # Jakarta Pusat
         {"zone_id": 2, "station_id": 102},  # Jakarta Utara
@@ -88,23 +95,22 @@ def start_simulator():
         {"zone_id": 5, "station_id": 105}   # Jakarta Barat
     ]
 
-    print("Memulai pemancaran telemetri IoT berstandar industri (Interval: 30 detik)...")
+    print("Memulai pemancaran telemetri IoT di 5 zona (Interval: 30 detik)...")
     client.loop_start()
     
     try:
         while True:
             for zone in zones:
-                telemetry_data = generate_zone_reading(zone["zone_id"], zone["station_id"])
+                air_data, weather_data = generate_zone_reading(zone["zone_id"], zone["station_id"])
                 
-                # SINKRONISASI BUNGKUS PAYLOAD: Dibungkus ke dalam objek 'data' agar terbaca oleh app.py
-                wrapped_payload = {
-                    "event": "telemetry.recorded",
-                    "data": telemetry_data
-                }
+                # Dynamic Topic Routing
+                air_topic = f"city/zone{zone['zone_id']}/airquality"
+                weather_topic = f"city/zone{zone['zone_id']}/weather"
                 
-                json_payload = json.dumps(wrapped_payload)
-                client.publish(MQTT_TOPIC, json_payload, qos=1)
-                print(f"Broadcast -> Zone {zone['zone_id']} | PM2.5: {telemetry_data['pm25']} | Temp: {telemetry_data['temperature']}°C")
+                client.publish(air_topic, json.dumps(air_data), qos=1)
+                client.publish(weather_topic, json.dumps(weather_data), qos=1)
+                
+                print(f"Broadcast -> Zone {zone['zone_id']} | PM2.5: {air_data['pm25']} | Temp: {weather_data['temperature']}°C")
                 
             time.sleep(30)
             
