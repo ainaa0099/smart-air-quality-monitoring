@@ -119,3 +119,7 @@ INSERT IGNORE INTO users (name, email, password, role, oauth_provider) VALUES
 -- Default OAuth Test Client (optional)
 INSERT IGNORE INTO oauth_clients (client_id, client_secret, client_name, grant_types) VALUES
 ('test-client', 'test-secret', 'Test Client', '["client_credentials", "password", "refresh_token"]');
+
+INSERT INTO `oauth_clients` (`client_id`, `client_secret`, `client_name`, `grant_types`, `is_active`)
+VALUES
+('simulator_client', 'UAS_SE-2_2026_A', 'IoT Device Simulator', '["client_credentials"]', 1);

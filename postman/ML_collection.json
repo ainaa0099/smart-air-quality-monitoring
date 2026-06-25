@@ -1,0 +1,70 @@
+[
+    {
+        "name": "Get Model Feature Importance",
+        "request": {
+            "method": "GET",
+            "header": [
+                {
+                    "key": "Authorization",
+                    "value": "Bearer {{jwt_access_token}}",
+                    "type": "text"
+                }
+            ],
+            "url": {
+                "raw": "{{gateway_url}}/api/ml/model/feature-importance",
+                "host": [
+                    "{{gateway_url}}"
+                ],
+                "path": [
+                    "api",
+                    "ml",
+                    "model",
+                    "feature-importance"
+                ]
+            },
+            "description": "Mengambil bobot fitur (feature importance) dari model-model yang telah dilatih. Endpoint ini memerlukan otentikasi JWT."
+        },
+        "response": []
+    },
+    {
+        "name": "Predict AQI in Batch",
+        "request": {
+            "method": "POST",
+            "header": [
+                {
+                    "key": "Authorization",
+                    "value": "Bearer {{jwt_access_token}}",
+                    "type": "text"
+                },
+                {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                }
+            ],
+            "body": {
+                "mode": "raw",
+                "raw": "{\n    \"requests\": [\n        {\n            \"pm25\": 55,\n            \"pm10\": 75,\n            \"no2\": 22,\n            \"co\": 0.9,\n            \"o3\": 34,\n            \"temperature\": 31,\n            \"humidity\": 78\n        },\n        {\n            \"pm25\": 12,\n            \"pm10\": 20,\n            \"no2\": 10,\n            \"co\": 0.4,\n            \"o3\": 45,\n            \"temperature\": 29,\n            \"humidity\": 80\n        },\n        {\n            \"pm25\": 160,\n            \"pm10\": 180,\n            \"no2\": 40,\n            \"co\": 1.5,\n            \"o3\": 25,\n            \"temperature\": 33,\n            \"humidity\": 72\n        }\n    ]\n}",
+                "options": {
+                    "raw": {
+                        "language": "json"
+                    }
+                }
+            },
+            "url": {
+                "raw": "{{gateway_url}}/api/ml/predict/batch",
+                "host": [
+                    "{{gateway_url}}"
+                ],
+                "path": [
+                    "api",
+                    "ml",
+                    "predict",
+                    "batch"
+                ]
+            },
+            "description": "Melakukan prediksi AQI untuk sekumpulan data (batch) dalam satu panggilan API. Ini jauh lebih efisien daripada memanggil endpoint prediksi satu per satu."
+        },
+        "response": []
+    }
+]

@@ -5,7 +5,7 @@ import os
 import pika
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 app = FastAPI(title="Smart City ML Service", version="1.3")
 
@@ -56,6 +56,9 @@ class AnomalyRequest(BaseModel):
     hour: int
     rolling_mean_1h: float
     z_score: float
+
+class BatchAQIRequest(BaseModel):
+    requests: list[AQIRequest] = Field(..., max_items=100) # Batasi hingga 100 request per batch
 
 
 # HTTP Endpoints
@@ -111,6 +114,61 @@ def detect_anomaly(data: AnomalyRequest):
             severity = "Peringatan" if data.z_score < 3.0 else "Kritis"
             
         return {"is_anomaly": is_anom, "severity": severity}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/model/feature-importance")
+def get_feature_importance():
+    """
+    Mengembalikan bobot fitur (feature importance) untuk model klasifikasi dan regresi.
+    """
+    models = MODELS
+    if models is None:
+        raise HTTPException(status_code=503, detail="Model belum siap di memori")
+    try:
+        # Feature importance untuk AQI Classifier (Gradient Boosting)
+        clf_importances = models['aqi_classifier'].feature_importances_
+        clf_features = models['clf_features']
+        clf_importance_dict = dict(zip(clf_features, clf_importances.tolist()))
+
+        # Feature importance untuk Pollution Predictor (Random Forest)
+        reg_importances = models['pollution_predictor'].feature_importances_
+        reg_features = models['reg_features']
+        reg_importance_dict = dict(zip(reg_features, reg_importances.tolist()))
+
+        return {
+            "aqi_classifier": {
+                "description": "Feature importances for Gradient Boosting Classifier (predicting AQI category)",
+                "importances": {k: round(v, 4) for k, v in sorted(clf_importance_dict.items(), key=lambda item: item[1], reverse=True)}
+            },
+            "pollution_predictor": {
+                "description": "Feature importances for Random Forest Regressor (predicting PM2.5 value)",
+                "importances": {k: round(v, 4) for k, v in sorted(reg_importance_dict.items(), key=lambda item: item[1], reverse=True)}
+            },
+            "anomaly_detector": {
+                "description": "Isolation Forest does not provide a direct feature_importances_ attribute."
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/predict/batch")
+def predict_batch(data: BatchAQIRequest):
+    """
+    Melakukan prediksi AQI untuk sekumpulan data (batch) secara efisien.
+    """
+    models = MODELS
+    if models is None:
+        raise HTTPException(status_code=503, detail="Model belum siap di memori")
+    try:
+        labels = {0: "Baik", 1: "Sedang", 2: "Tidak Sehat", 3: "Sangat Tidak Sehat", 4: "Berbahaya"}
+        input_list = [[req.pm25, req.pm10, req.no2, req.co, req.o3, req.temperature, req.humidity] for req in data.requests]
+        if not input_list: return {"predictions": []}
+
+        scaled_data = models['scaler_clf'].transform(input_list)
+        predictions = models['aqi_classifier'].predict(scaled_data)
+        results = [{"request_index": i, "aqi_class": int(pred), "label": labels.get(int(pred), "Tidak Diketahui")} for i, pred in enumerate(predictions)]
+        return {"predictions": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
