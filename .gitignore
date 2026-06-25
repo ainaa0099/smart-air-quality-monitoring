@@ -141,3 +141,40 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.pkl
+*.joblib
+.ipynb_checkpoints/
+
+# PHP
+vendor/
+*.log
+
+# Environment & Secrets
+.env.local
+.env.production
+*.pem
+*.key
+*.cert
+
+# Docker
+.docker/
+
+# Database
+*.sql.bak
+dump.sql
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
