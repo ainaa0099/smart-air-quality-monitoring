@@ -24,6 +24,10 @@ const createLoginLog = async (data) => {
   const connection = await db.getConnection();
   await connection.query(query, values);
   connection.release();
+  try {
+  } catch (error) {
+    console.error("Error creating login log:", error);
+  }
 };
 
 module.exports = { createLoginLog };
