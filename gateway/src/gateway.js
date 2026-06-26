@@ -384,10 +384,10 @@ const createServiceProxy = (targetUrl) => {
 
 const protectedMiddleware = [ipRateLimiter, introspectToken, tokenRateLimiter];
 
-app.post(
-  "/api/citizens",
-  createServiceProxy(process.env.CITIZEN_SERVICE_URL),
-);
+// app.post(
+//   "/api/citizens",
+//   createServiceProxy(process.env.CITIZEN_SERVICE_URL),
+// );
 app.use(
   "/api/citizens",
   protectedMiddleware,
@@ -477,7 +477,6 @@ app.listen(PORT, () => {
   - POST   /oauth/token               (Get access token)
   - POST   /oauth/introspect          (Validate token)
   - POST   /oauth/revoke              (Revoke token)
-  - POST   /api/auth/register         (User registration)
   - POST   /api/auth/login            (User login)
   `);
 });

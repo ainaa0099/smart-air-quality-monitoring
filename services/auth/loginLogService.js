@@ -21,16 +21,18 @@ const createLoginLog = async (data) => {
     data.user_agent || null,
   ];
 
-  const connection = await db.getConnection();
-  await connection.query(query, values);
-  connection.release();
+  let connection;
   try {
+    connection = await db.getConnection();
+    await connection.query(query, values);
   } catch (error) {
     console.error(
       "[Login Log Service] Failed to create login log:",
       error.message,
     );
     throw error;
+  } finally {
+    if (connection) connection.release();
   }
 };
 
