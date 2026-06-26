@@ -11,6 +11,7 @@ class CitizenValidator {
         if (!$isUpdate) {
             $this->validateNik($data['nik'] ?? null);
             $this->validateEmail($data['email'] ?? null);
+            $this->validatePassword($data['password'] ?? null);
         }
 
         if (isset($data['name'])) {
@@ -68,6 +69,17 @@ class CitizenValidator {
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $this->errors['email'] = 'Invalid email format';
+        }
+    }
+
+    private function validatePassword(?string $password): void {
+        if (empty($password)) {
+            $this->errors['password'] = 'Password is required';
+            return;
+        }
+
+        if (strlen($password) < 6) {
+            $this->errors['password'] = 'Password must be at least 6 characters';
         }
     }
 

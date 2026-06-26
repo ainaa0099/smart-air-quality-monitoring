@@ -15,7 +15,9 @@ class Citizen {
 
     public function findAll(): array {
         $stmt = $this->db->prepare("
-            SELECT c.*, z.name as zone_name 
+            SELECT c.id, c.nik, c.name, c.email, c.phone, c.zone_id, c.role, 
+                   c.is_active, c.oauth_provider, c.avatar_url, c.created_at,
+                   z.name as zone_name 
             FROM {$this->table} c
             LEFT JOIN zones z ON c.zone_id = z.id
             ORDER BY c.created_at DESC
@@ -26,7 +28,9 @@ class Citizen {
 
     public function findById(int $id): array|false {
         $stmt = $this->db->prepare("
-            SELECT c.*, z.name as zone_name 
+            SELECT c.id, c.nik, c.name, c.email, c.phone, c.zone_id, c.role,
+                   c.is_active, c.oauth_provider, c.avatar_url, c.created_at,
+                   z.name as zone_name 
             FROM {$this->table} c
             LEFT JOIN zones z ON c.zone_id = z.id
             WHERE c.id = ?
@@ -53,17 +57,20 @@ class Citizen {
 
     public function create(array $data): array|false {
         $stmt = $this->db->prepare("
-            INSERT INTO {$this->table} (nik, name, email, phone, zone_id, role, created_at)
-            VALUES (:nik, :name, :email, :phone, :zone_id, :role, NOW())
+            INSERT INTO {$this->table} (nik, name, email, password, phone, zone_id, role, is_active, oauth_provider, created_at)
+            VALUES (:nik, :name, :email, :password, :phone, :zone_id, :role, :is_active, :oauth_provider, NOW())
         ");
 
         $stmt->execute([
-            ':nik'     => $data['nik'],
-            ':name'    => $data['name'],
-            ':email'   => $data['email'],
-            ':phone'   => $data['phone'],
-            ':zone_id' => $data['zone_id'],
-            ':role'    => $data['role'] ?? 'citizen',
+            ':nik'            => $data['nik'],
+            ':name'           => $data['name'],
+            ':email'          => $data['email'],
+            ':password'       => $data['password'],
+            ':phone'          => $data['phone'],
+            ':zone_id'        => $data['zone_id'],
+            ':role'           => $data['role'] ?? 'citizen',
+            ':is_active'      => true,
+            ':oauth_provider' => $data['oauth_provider'] ?? 'local',
         ]);
 
         return $this->findById((int) $this->db->lastInsertId());
@@ -73,7 +80,7 @@ class Citizen {
         $fields = [];
         $params = [];
 
-        $allowed = ['name', 'email', 'phone', 'zone_id'];
+        $allowed = ['name', 'email', 'phone', 'zone_id', 'avatar_url'];
         foreach ($allowed as $field) {
             if (isset($data[$field])) {
                 $fields[] = "$field = :$field";

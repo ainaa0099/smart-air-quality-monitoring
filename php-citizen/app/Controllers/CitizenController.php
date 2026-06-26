@@ -3,7 +3,6 @@
 namespace App\Controllers;
 
 use App\Models\Citizen;
-use App\Services\RabbitMQPublisher;
 use App\Validators\CitizenValidator;
 
 class CitizenController {
@@ -17,7 +16,6 @@ class CitizenController {
 
     public function index(): void {
         $citizens = $this->model->findAll();
-
         $this->respond(200, 'success', 'Citizens retrieved successfully', $citizens);
     }
 
@@ -51,6 +49,8 @@ class CitizenController {
             $this->respond(409, 'error', 'Email already registered', null, 409);
             return;
         }
+
+        $data['password'] = password_hash($data['password'], PASSWORD_BCRYPT);
 
         $citizen = $this->model->create($data);
 
