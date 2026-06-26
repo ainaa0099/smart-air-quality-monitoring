@@ -384,8 +384,22 @@ const createServiceProxy = (targetUrl) => {
 
 const protectedMiddleware = [ipRateLimiter, introspectToken, tokenRateLimiter];
 
+app.post(
+  "/api/citizens",
+  createServiceProxy(process.env.CITIZEN_SERVICE_URL),
+);
 app.use(
   "/api/citizens",
+  protectedMiddleware,
+  createServiceProxy(process.env.CITIZEN_SERVICE_URL),
+);
+app.use(
+  "/api/reports",
+  protectedMiddleware,
+  createServiceProxy(process.env.CITIZEN_SERVICE_URL),
+);
+app.use(
+  "/api/notifications",
   protectedMiddleware,
   createServiceProxy(process.env.CITIZEN_SERVICE_URL),
 );
@@ -400,7 +414,12 @@ app.use(
   createServiceProxy(process.env.ENVIRONMENT_SERVICE_URL),
 );
 app.use(
-  "/api/ml",
+  "/predict",
+  protectedMiddleware,
+  createServiceProxy(process.env.PYTHON_ML_SERVICE_URL),
+);
+app.use(
+  "/detect",
   protectedMiddleware,
   createServiceProxy(process.env.PYTHON_ML_SERVICE_URL),
 );
@@ -410,7 +429,7 @@ app.use(
   createServiceProxy(process.env.AIRQUALITY_SERVICE_URL),
 );
 app.use(
-  "/iot/air",
+  "/iot/weather",
   protectedMiddleware,
   createServiceProxy(process.env.ENVIRONMENT_SERVICE_URL),
 );
