@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # 1. Database Service (MySQL)
+  db_smartcity:
+    image: mysql:8.0
+    container_name: db_smartcity
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: 'db_smartcity'
+      MYSQL_ROOT_PASSWORD: '' 
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./services/auth/db_smartcity.sql:/docker-entrypoint-initdb.d/init.sql
+      - db_data:/var/lib/mysql
+    networks:
+      - smartcity-net
+
+  # 2. Auth Service (Node.js)
+  auth:
+    build: ./services/auth
+    container_name: auth_service
+    env_file: .env # Membaca variabel dari file .env
+    restart: unless-stopped
+    ports:
+      - "${PORT_AUTH:-3002}:3002"
+    environment:
+      - PORT=${PORT_AUTH:-3002}
+      - DB_HOST=${DB_HOST}
+    depends_on:
+      - db_smartcity
+    networks:
+      - smartcity-net
+
+  # 3. API Gateway (Node.js)
+  gateway:
+    build: ./gateway
+    container_name: api_gateway
+    env_file: .env # Membaca variabel dari file .env
+    restart: unless-stopped
+    ports:
+      - "${PORT_GATEWAY:-3000}:3000"
+    environment:
+      - PORT=${PORT_GATEWAY:-3000}
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL}
+      - OAUTH_SERVER_URL=${AUTH_SERVICE_URL} # OAUTH_SERVER_URL sama dengan AUTH_SERVICE_URL
+    depends_on:
+      - auth
+    networks:
+      - smartcity-net
+
+networks:
+  smartcity-net:
+    driver: bridge
+
+volumes:
+  db_data:
