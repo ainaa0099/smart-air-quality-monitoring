@@ -90,19 +90,22 @@ $callback = function ($msg) {
         }
 
         $stmtNotif = $db->prepare("
-            INSERT INTO list_notification (
+            INSERT INTO env_zone_status (
                 zone_id,
+                alert_type,
                 notification,
                 created_at
             )
-            VALUES (?, ?, ?)
+            VALUES (?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
+                alert_type = VALUES(alert_type),
                 notification = VALUES(notification),
                 created_at = VALUES(created_at)
         ");
 
         $stmtNotif->execute([
             $data['zone_id'],
+            $data['severity'] ?? 'Normal', // atau $data['alert_type'] jika memang dikirim publisher
             $notification,
             $data['created_at'] ?? date('Y-m-d H:i:s')
         ]);
