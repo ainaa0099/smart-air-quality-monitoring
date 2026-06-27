@@ -17,7 +17,28 @@ $connection = new AMQPStreamConnection(
 );
 
 $channel = $connection->channel();
-$channel->queue_declare('anomaly.alert', false, false, false, false);
+
+$channel->exchange_declare(
+    'city.events',
+    'topic',
+    false,
+    true,
+    false
+);
+
+$channel->queue_declare(
+    'anomaly.alert',
+    false,
+    false,
+    false,
+    false
+);
+
+$channel->queue_bind(
+    'anomaly.alert',
+    'city.events',
+    'anomaly.alert'
+);
 
 echo "Waiting for anomaly.alert...\n";
 
