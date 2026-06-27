@@ -1,30 +1,55 @@
 <?php
 
-require_once __DIR__ . '/../app/Controllers/ItemController.php';
-require_once __DIR__ . '/../app/Controllers/Tab2Controller.php';
+require_once '../app/Config/Env.php';
 
-$method = $_SERVER['REQUEST_METHOD'];
-$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$id = $_GET['id'] ?? null;
+Env::load(__DIR__ . '/../.env');
 
-/* TAB 1 */
-if ($path === '/items') {
-    $controller = new ItemController();
+require_once '../app/Config/Database.php';
 
-    if ($method === 'GET' && $id) $controller->show($id);
-    else if ($method === 'GET') $controller->index();
-    else if ($method === 'POST') $controller->store();
-    else if ($method === 'PUT') $controller->update($id);
-    else if ($method === 'DELETE') $controller->destroy($id);
+require_once '../app/Models/Weather.php';
+require_once '../app/Models/Alert.php';
+
+require_once '../app/Controllers/WeatherController.php';
+require_once '../app/Controllers/AlertController.php';
+
+$uri = parse_url(
+    $_SERVER['REQUEST_URI'],
+    PHP_URL_PATH
+);
+
+if ($uri == '/api/environment/weather'
+    && $_SERVER['REQUEST_METHOD'] == 'POST') {
+
+    (new WeatherController())->store();
 }
 
-/* TAB 2 */
-if ($path === '/tab2') {
-    $controller = new Tab2Controller();
+elseif ($uri == '/api/environment/current'
+    && $_SERVER['REQUEST_METHOD'] == 'GET') {
 
-    if ($method === 'GET' && $id) $controller->show($id);
-    else if ($method === 'GET') $controller->index();
-    else if ($method === 'POST') $controller->store();
-    else if ($method === 'PUT') $controller->update($id);
-    else if ($method === 'DELETE') $controller->destroy($id);
+    (new WeatherController())->current();
+}
+
+elseif ($uri == '/api/environment/alerts'
+    && $_SERVER['REQUEST_METHOD'] == 'GET') {
+
+    (new AlertController())->index();
+}
+
+elseif ($uri == '/api/environment/notification'
+    && $_SERVER['REQUEST_METHOD'] == 'GET') {
+
+    $db = Database::connect();
+
+    $stmt = $db->query("SELECT * FROM list_notification");
+    $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    echo json_encode([
+        "status" => "success",
+        "code" => 200,
+        "data" => $data,
+        "timestamp" => date('Y-m-d H:i:s'),
+        "service" => "environment"
+    ]);
+
+    exit;
 }
