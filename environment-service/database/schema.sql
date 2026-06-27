@@ -1,46 +1,48 @@
 CREATE DATABASE IF NOT EXISTS smartcity CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE smartcity;
 
-CREATE TABLE IF NOT EXISTS zones (
-    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE zones (
+    id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     city_district VARCHAR(100) NOT NULL,
-    coordinates VARCHAR(100) NULL,
-    area_km2 DECIMAL(8,2) NULL,
+    coordinates VARCHAR(100),
+    area_km2 DECIMAL(10,2),
     UNIQUE KEY uq_zones_name (name)
-) ENGINE=InnoDB;
+);
 
-CREATE TABLE IF NOT EXISTS air_stations (
+CREATE TABLE air_stations (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    zone_id INT UNSIGNED NOT NULL,
+    zone_id INT NOT NULL,
     station_name VARCHAR(120) NOT NULL,
     station_code VARCHAR(40) NOT NULL,
-    latitude DECIMAL(10,7) NULL,
-    longitude DECIMAL(10,7) NULL,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    latitude DECIMAL(10,7),
+    longitude DECIMAL(10,7),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_air_station_code (station_code),
-    KEY idx_air_stations_zone (zone_id),
-    CONSTRAINT fk_air_stations_zone FOREIGN KEY (zone_id) REFERENCES zones(id)
-) ENGINE=InnoDB;
+    FOREIGN KEY (zone_id) REFERENCES zones(id)
+);
 
-CREATE TABLE IF NOT EXISTS air_readings (
+CREATE TABLE air_readings (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     station_id BIGINT UNSIGNED NULL,
-    zone_id INT UNSIGNED NOT NULL,
+    zone_id INT NOT NULL,
     pm25 DECIMAL(10,2) NOT NULL,
     pm10 DECIMAL(10,2) NOT NULL,
     no2 DECIMAL(10,2) NOT NULL,
     co DECIMAL(10,2) NOT NULL,
     o3 DECIMAL(10,2) NOT NULL,
-    aqi_value SMALLINT UNSIGNED NOT NULL,
-    aqi_category VARCHAR(30) NOT NULL,
-    dominant_pollutant VARCHAR(10) NOT NULL,
-    recorded_at DATETIME NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    -- Index ini mempercepat endpoint current dan history per zona.
-    KEY idx_air_readings_zone_time (zone_id, recorded_at),
-    KEY idx_air_readings_station_time (station_id, recorded_at),
-    CONSTRAINT fk_air_readings_zone FOREIGN KEY (zone_id) REFERENCES zones(id),
-    CONSTRAINT fk_air_readings_station FOREIGN KEY (station_id) REFERENCES air_stations(id)
-) ENGINE=InnoDB;
+    aqi_value SMALLINT UNSIGNED,
+    aqi_category VARCHAR(30),
+    dominant_pollutant VARCHAR(10),
+    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (zone_id) REFERENCES zones(id),
+    FOREIGN KEY (station_id) REFERENCES air_stations(id)
+);
+
+CREATE TABLE env_zone_status (
+    zone_id INT UNSIGNED PRIMARY KEY,
+    alert_type VARCHAR(20) NOT NULL,
+    notification TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
