@@ -21,18 +21,21 @@ if ($uri == '/api/environment/weather'
     && $_SERVER['REQUEST_METHOD'] == 'POST') {
 
     (new WeatherController())->store();
+    exit;
 }
 
 elseif ($uri == '/api/environment/current'
     && $_SERVER['REQUEST_METHOD'] == 'GET') {
 
     (new WeatherController())->current();
+    exit;
 }
 
 elseif ($uri == '/api/environment/alerts'
     && $_SERVER['REQUEST_METHOD'] == 'GET') {
 
     (new AlertController())->index();
+    exit;
 }
 
 elseif ($uri == '/api/environment/notification'
