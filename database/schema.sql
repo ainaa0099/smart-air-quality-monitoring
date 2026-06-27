@@ -242,6 +242,17 @@ CREATE INDEX idx_reports_status ON citizen_reports(status);
 CREATE INDEX idx_reports_zone ON citizen_reports(zone_id);
 
 -- ============================================================
+-- DEFAULT ZONES
+-- ============================================================
+
+INSERT INTO zones (name, city_district, coordinates, area_km2) VALUES
+('Zone 1', 'Jakarta Pusat', '-6.1862,106.8284', 48.13),
+('Zone 2', 'Jakarta Utara', '-6.1384,106.8636', 146.66),
+('Zone 3', 'Jakarta Selatan', '-6.2615,106.8106', 141.27),
+('Zone 4', 'Jakarta Timur', '-6.2250,106.9004', 188.03),
+('Zone 5', 'Jakarta Barat', '-6.1352,106.7621', 129.54);
+
+-- ============================================================
 -- DEFAULT AIR QUALITY STATIONS
 -- One station per zone, matching the station_id convention
 -- (101-105) used by the ML simulator (Anggota 5).
