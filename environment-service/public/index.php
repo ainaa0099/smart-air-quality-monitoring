@@ -40,7 +40,7 @@ elseif ($uri == '/api/environment/notification'
 
     $db = Database::connect();
 
-    $stmt = $db->query("SELECT * FROM list_notification");
+    $stmt = $db->query("SELECT * FROM env_zone_status");
     $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     echo json_encode([
