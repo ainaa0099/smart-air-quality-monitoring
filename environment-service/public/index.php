@@ -8,7 +8,9 @@ require_once '../app/Config/Database.php';
 
 require_once '../app/Models/Weather.php';
 require_once '../app/Models/Alert.php';
+require_once '../app/Models/Zone.php';
 
+require_once '../app/Controllers/ZoneController.php';
 require_once '../app/Controllers/WeatherController.php';
 require_once '../app/Controllers/AlertController.php';
 
@@ -35,6 +37,22 @@ elseif ($uri == '/api/environment/alerts'
     && $_SERVER['REQUEST_METHOD'] == 'GET') {
 
     (new AlertController())->index();
+    exit;
+}
+
+elseif (
+    $uri == '/api/environment/zones'
+    && $_SERVER['REQUEST_METHOD'] == 'GET'
+) {
+    (new ZoneController())->index();
+    exit;
+}
+
+elseif (
+    preg_match('#^/api/environment/zones/(\d+)$#', $uri, $matches)
+    && $_SERVER['REQUEST_METHOD'] == 'GET'
+) {
+    (new ZoneController())->show((int)$matches[1]);
     exit;
 }
 
