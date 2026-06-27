@@ -53,3 +53,39 @@ elseif ($uri == '/api/environment/notification'
 
     exit;
 }
+
+elseif ($uri == '/health'
+    && $_SERVER['REQUEST_METHOD'] == 'GET') {
+
+    try {
+        $db = Database::connect();
+        $db->query("SELECT 1");
+
+        http_response_code(200);
+        echo json_encode([
+            "status" => "UP",
+            "database" => "connected",
+            "service" => "environment",
+            "timestamp" => date('Y-m-d H:i:s')
+        ]);
+    } catch (PDOException $e) {
+
+        http_response_code(503);
+        echo json_encode([
+            "status" => "DOWN",
+            "database" => "disconnected",
+            "service" => "environment",
+            "error" => $e->getMessage(),
+            "timestamp" => date('Y-m-d H:i:s')
+        ]);
+    }
+
+    exit;
+}
+
+http_response_code(404);
+echo json_encode([
+    "status" => "error",
+    "code" => 404,
+    "message" => "Endpoint not found"
+]);
