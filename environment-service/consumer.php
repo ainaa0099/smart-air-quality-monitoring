@@ -59,21 +59,23 @@ $callback = function ($msg) {
             INSERT INTO env_alerts (
                 zone_id,
                 event,
+                alert_type,
                 pollutant,
                 anomaly_score,
                 severity,
                 value,
                 threshold,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         $stmt->execute([
-            $data['zone_id'] ?? null,
-            $data['event'] ?? null,
+            $data['zone_id'],
+            $data['event'] ?? 'anomaly.alert',
+            $data['alert_type'] ?? 'Air Quality',
             $data['pollutant'] ?? null,
             $data['anomaly_score'] ?? null,
-            $data['severity'] ?? null,
+            $data['severity'] ?? 'Normal',
             $data['value'] ?? null,
             $data['threshold'] ?? null,
             $data['created_at'] ?? date('Y-m-d H:i:s')
@@ -113,20 +115,17 @@ $callback = function ($msg) {
         $stmtNotif = $db->prepare("
             INSERT INTO env_zone_status (
                 zone_id,
-                alert_type,
                 notification,
                 created_at
             )
-            VALUES (?, ?, ?, ?)
+            VALUES (?, ?, ?)
             ON DUPLICATE KEY UPDATE
-                alert_type = VALUES(alert_type),
                 notification = VALUES(notification),
                 created_at = VALUES(created_at)
         ");
 
         $stmtNotif->execute([
             $data['zone_id'],
-            $data['severity'] ?? 'Normal', // atau $data['alert_type'] jika memang dikirim publisher
             $notification,
             $data['created_at'] ?? date('Y-m-d H:i:s')
         ]);
