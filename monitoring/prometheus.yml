@@ -1,0 +1,76 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+
+  # ==========================
+  # API Gateway
+  # ==========================
+  - job_name: "api-gateway"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - api-gateway:3000
+
+  # ==========================
+  # OAuth Server
+  # ==========================
+  - job_name: "oauth-server"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - oauth-server:3002
+
+  # ==========================
+  # Citizen Service
+  # ==========================
+  - job_name: "citizen-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - citizen-service:8000
+
+  # ==========================
+  # Air Quality Service
+  # ==========================
+  - job_name: "airquality-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - airquality-service:8001
+
+  # ==========================
+  # Environment Service
+  # ==========================
+  - job_name: "environment-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - environment-service:8002
+
+  # ==========================
+  # Python ML Service
+  # ==========================
+  - job_name: "ml-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - ml-service:5000
+
+  # ==========================
+  # RabbitMQ
+  # ==========================
+  - job_name: "rabbitmq"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - rabbitmq:15692
+
+  # ==========================
+  # Prometheus Self Monitoring
+  # ==========================
+  - job_name: "prometheus"
+    static_configs:
+      - targets:
+          - localhost:9090
