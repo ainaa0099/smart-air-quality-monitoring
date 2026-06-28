@@ -1,0 +1,2 @@
+wt ^
+new-tab cmd /k "cd /d C:\Users\dharu\environment-service && docker rm -f environment-service && docker build -t environment-service . && docker run -d --name environment-service -p 8002:8002 environment-service && docker exec -it environment-service php consumer.php" ;

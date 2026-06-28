@@ -1,30 +1,115 @@
 <?php
 
-require_once __DIR__ . '/../app/Controllers/ItemController.php';
-require_once __DIR__ . '/../app/Controllers/Tab2Controller.php';
+require_once '../app/Config/Env.php';
 
-$method = $_SERVER['REQUEST_METHOD'];
-$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$id = $_GET['id'] ?? null;
+Env::load(__DIR__ . '/../.env');
 
-/* TAB 1 */
-if ($path === '/items') {
-    $controller = new ItemController();
+header('Content-Type: application/json');
 
-    if ($method === 'GET' && $id) $controller->show($id);
-    else if ($method === 'GET') $controller->index();
-    else if ($method === 'POST') $controller->store();
-    else if ($method === 'PUT') $controller->update($id);
-    else if ($method === 'DELETE') $controller->destroy($id);
+require_once '../app/Config/Database.php';
+
+require_once '../app/Models/Weather.php';
+require_once '../app/Models/Alert.php';
+require_once '../app/Models/Zone.php';
+
+require_once '../app/Controllers/ZoneController.php';
+require_once '../app/Controllers/WeatherController.php';
+require_once '../app/Controllers/AlertController.php';
+
+$uri = parse_url(
+    $_SERVER['REQUEST_URI'],
+    PHP_URL_PATH
+);
+
+// Routing sederhana untuk endpoint environment-service.
+if ($uri == '/api/environment/weather'
+    && $_SERVER['REQUEST_METHOD'] == 'POST') {
+
+    (new WeatherController())->store();
+    exit;
 }
 
-/* TAB 2 */
-if ($path === '/tab2') {
-    $controller = new Tab2Controller();
+elseif ($uri == '/api/environment/current'
+    && $_SERVER['REQUEST_METHOD'] == 'GET') {
 
-    if ($method === 'GET' && $id) $controller->show($id);
-    else if ($method === 'GET') $controller->index();
-    else if ($method === 'POST') $controller->store();
-    else if ($method === 'PUT') $controller->update($id);
-    else if ($method === 'DELETE') $controller->destroy($id);
+    (new WeatherController())->current();
+    exit;
 }
+
+elseif ($uri == '/api/environment/alerts'
+    && $_SERVER['REQUEST_METHOD'] == 'GET') {
+
+    (new AlertController())->index();
+    exit;
+}
+
+elseif (
+    $uri == '/api/environment/zones'
+    && $_SERVER['REQUEST_METHOD'] == 'GET'
+) {
+    (new ZoneController())->index();
+    exit;
+}
+
+elseif (
+    preg_match('#^/api/environment/zones/(\d+)$#', $uri, $matches)
+    && $_SERVER['REQUEST_METHOD'] == 'GET'
+) {
+    (new ZoneController())->show((int)$matches[1]);
+    exit;
+}
+
+elseif ($uri == '/api/environment/notification'
+    && $_SERVER['REQUEST_METHOD'] == 'GET') {
+
+    $db = Database::connect();
+
+    $stmt = $db->query("SELECT * FROM env_zone_status");
+    $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    echo json_encode([
+        "status" => "success",
+        "code" => 200,
+        "data" => $data,
+        "timestamp" => date('Y-m-d H:i:s'),
+        "service" => "environment"
+    ]);
+
+    exit;
+}
+
+elseif ($uri == '/health'
+    && $_SERVER['REQUEST_METHOD'] == 'GET') {
+
+    try {
+        $db = Database::connect();
+        $db->query("SELECT 1");
+
+        http_response_code(200);
+        echo json_encode([
+            "status" => "UP",
+            "database" => "connected",
+            "service" => "environment",
+            "timestamp" => date('Y-m-d H:i:s')
+        ]);
+    } catch (PDOException $e) {
+
+        http_response_code(503);
+        echo json_encode([
+            "status" => "DOWN",
+            "database" => "disconnected",
+            "service" => "environment",
+            "error" => $e->getMessage(),
+            "timestamp" => date('Y-m-d H:i:s')
+        ]);
+    }
+
+    exit;
+}
+
+http_response_code(404);
+echo json_encode([
+    "status" => "error",
+    "code" => 404,
+    "message" => "Endpoint not found"
+]);
