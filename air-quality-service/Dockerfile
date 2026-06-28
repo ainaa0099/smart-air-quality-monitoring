@@ -1,10 +1,12 @@
 FROM composer:2 AS vendor
 WORKDIR /app
 COPY composer.json ./
+RUN apk add --no-cache linux-headers
+RUN docker-php-ext-install sockets
 RUN composer install --no-dev --prefer-dist --no-interaction --no-progress
 
 FROM php:8.2-cli
-RUN docker-php-ext-install pdo_mysql
+RUN docker-php-ext-install pdo_mysql sockets
 WORKDIR /app
 COPY --from=vendor /app/vendor ./vendor
 COPY . .
