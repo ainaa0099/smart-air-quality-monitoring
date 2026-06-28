@@ -1,4 +1,16 @@
 apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbitmq-data
+  namespace: smartcity
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: v1
 kind: Service
 metadata:
   name: rabbitmq
@@ -59,7 +71,8 @@ spec:
             periodSeconds: 10
       volumes:
         - name: rabbitmq-data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: rabbitmq-data
 
 ---
 apiVersion: v1
@@ -141,6 +154,8 @@ spec:
           ports:
             - containerPort: 1880
           env:
+            - name: TZ
+              value: "Asia/Jakarta"
             - name: MQTT_HOST
               valueFrom:
                 configMapKeyRef:
@@ -153,6 +168,25 @@ spec:
                   key: MQTT_PORT
             - name: GATEWAY_URL
               value: "http://api-gateway:3000"
+          volumeMounts:
+            - name: node-red-data
+              mountPath: /data
+      volumes:
+        - name: node-red-data
+          persistentVolumeClaim:
+            claimName: node-red-data
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: node-red-data
+  namespace: smartcity
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
 
 ---
 apiVersion: v1

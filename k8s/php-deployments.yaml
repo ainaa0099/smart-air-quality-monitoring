@@ -169,6 +169,11 @@ spec:
                 configMapKeyRef:
                   name: smartcity-config
                   key: PORT_ENVIRONMENT
+            - name: SERVICE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcity-config
+                  key: SERVICE_PORT
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
@@ -189,9 +194,9 @@ spec:
                 secretKeyRef:
                   name: smartcity-secrets
                   key: RABBITMQ_PASS
-          # Environment service belum punya /health di branch terbaru.
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health
               port: 8002
             initialDelaySeconds: 20
             periodSeconds: 10
@@ -257,4 +262,3 @@ spec:
     - name: http
       port: 8002
       targetPort: 8002
-

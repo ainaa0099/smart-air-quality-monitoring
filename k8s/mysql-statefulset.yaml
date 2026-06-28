@@ -31,7 +31,7 @@ spec:
     spec:
       containers:
         - name: mysql
-          image: mysql:8.0
+          image: mysql:8.4
           imagePullPolicy: IfNotPresent
           ports:
             - name: mysql
@@ -71,4 +71,3 @@ spec:
         resources:
           requests:
             storage: 2Gi
-
