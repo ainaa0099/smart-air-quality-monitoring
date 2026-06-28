@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smartcity
+  labels:
+    app.kubernetes.io/name: smart-air-quality-monitoring
+
