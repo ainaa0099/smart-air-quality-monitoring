@@ -2,18 +2,18 @@ version: '3.8'
 
 services:
   # 1. Database Service (MySQL)
-  db_smartcity:
+  smartcity:
     image: mysql:8.0
-    container_name: db_smartcity
+    container_name: smartcity
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: 'db_smartcity'
+      MYSQL_DATABASE: 'smartcity'
       MYSQL_ROOT_PASSWORD: '' 
       MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
     ports:
       - "3307:3306"
     volumes:
-      - ./services/auth/db_smartcity.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./services/auth/smartcity.sql:/docker-entrypoint-initdb.d/init.sql
       - db_data:/var/lib/mysql
     networks:
       - smartcity-net
@@ -30,7 +30,7 @@ services:
       - PORT=${PORT_AUTH:-3002}
       - DB_HOST=${DB_HOST}
     depends_on:
-      - db_smartcity
+      - smartcity
     networks:
       - smartcity-net
 

@@ -1,5 +1,5 @@
-CREATE DATABASE IF NOT EXISTS db_smartcity;
-USE db_smartcity;
+CREATE DATABASE IF NOT EXISTS smartcity;
+USE smartcity;
 
 -- Users table
 CREATE TABLE IF NOT EXISTS citizen_citizens (
