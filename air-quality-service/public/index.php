@@ -37,6 +37,7 @@ try {
         $method === 'GET' && $path === '/health' => Response::json([
             'database' => Database::healthCheck() ? 'connected' : 'disconnected',
         ], 200, 'Air Quality Service healthy'),
+        $method === 'GET' && $path === '/metrics' => require __DIR__ . '/metrics.php',
         // Gateway umum dan jalur IoT memakai proses penyimpanan yang sama.
         $method === 'POST' && in_array($path, ['/api/airquality/readings', '/iot/airquality'], true) =>
             (new ReadingController())->store($input),

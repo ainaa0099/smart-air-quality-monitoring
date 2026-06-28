@@ -440,6 +440,24 @@ const citizenProfileAccess = (req, res, next) => {
 
 const protectedMiddleware = [ipRateLimiter, introspectToken, tokenRateLimiter];
 
+const iotIngestAccess = (req, res, next) => {
+  const expectedSecret =
+    process.env.IOT_INGEST_SECRET || process.env.GATEWAY_INTERNAL_SECRET;
+
+  if (
+    expectedSecret &&
+    req.headers["x-iot-secret"] &&
+    req.headers["x-iot-secret"] === expectedSecret
+  ) {
+    req.user = { role: "iot-device", sub: "iot-bridge" };
+    return next();
+  }
+
+  return introspectToken(req, res, () => {
+    adminOnly(req, res, () => tokenRateLimiter(req, res, next));
+  });
+};
+
 // app.post(
 //   "/api/citizens",
 //   createServiceProxy(process.env.CITIZEN_SERVICE_URL),
@@ -488,10 +506,14 @@ app.use(
 );
 app.use(
   "/iot/airquality",
+  ipRateLimiter,
+  iotIngestAccess,
   createServiceProxy(process.env.AIRQUALITY_SERVICE_URL),
 );
 app.use(
   "/iot/weather",
+  ipRateLimiter,
+  iotIngestAccess,
   createServiceProxy(process.env.ENVIRONMENT_SERVICE_URL),
 );
 

@@ -107,6 +107,13 @@ elseif ($uri == '/health'
     exit;
 }
 
+elseif ($uri == '/metrics'
+    && $_SERVER['REQUEST_METHOD'] == 'GET') {
+
+    require __DIR__ . '/metrics.php';
+    exit;
+}
+
 http_response_code(404);
 echo json_encode([
     "status" => "error",

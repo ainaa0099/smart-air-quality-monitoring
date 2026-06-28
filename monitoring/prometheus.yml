@@ -1,0 +1,40 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'api-gateway'
+    metrics_path: /api/metrics
+    static_configs:
+      - targets: ['api-gateway:3000']
+
+  - job_name: auth
+    metrics_path: /api/metrics
+    static_configs:
+      - targets:
+          - auth:3002
+
+  - job_name: python-ml
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - python-ml:5000
+          
+  - job_name: 'citizen-service'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['citizen-service:8000']
+
+  - job_name: 'airquality-service'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['airquality-service:8001']
+
+  - job_name: 'environment-service'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['environment-service:8002']
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

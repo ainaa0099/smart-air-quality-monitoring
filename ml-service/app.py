@@ -7,6 +7,8 @@ import time
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from fastapi import Response
 
 app = FastAPI(title="Smart City ML Service", version="1.3")
 
@@ -16,7 +18,20 @@ MODEL_PATH = os.path.join(BASE_DIR, 'models', 'smartcity_models.pkl')
 # Global variables dengan penanganan typing eksplisit demi Pylance
 MODELS: dict | None = None
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
-RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "city.events") 
+RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "city.events")
+
+REQUEST_COUNT = Counter(
+    'ml_requests_total',
+    'Total ML requests',
+    ['endpoint']
+)
+
+REQUEST_LATENCY = Histogram(
+    'ml_request_duration_seconds',
+    'ML request latency',
+    ['endpoint']
+)
+
 
 @app.on_event("startup")
 def load_models_and_start_consumer():
@@ -211,6 +226,13 @@ def start_rabbitmq_consumer():
         except Exception as e:
             print(f"RabbitMQ disconnected: {e}")
             time.sleep(5)
+
+@app.get('/metrics')
+def metrics():
+    return Response(
+        generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )
 
 if __name__ == '__main__':
     import uvicorn
