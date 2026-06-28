@@ -498,88 +498,127 @@ app.post("/oauth/revoke", async (req, res) => {
 
 // ==================== USER ENDPOINTS ====================
 
-// app.post("/register", async (req, res) => {
-//   const { name, email, password } = req.body;
+app.post("/register", async (req, res) => {
+  const {
+    nik,
+    name,
+    email,
+    password,
+    phone = "080000000000",
+    zone_id = 1,
+  } = req.body;
 
-//   if (!name || !email || !password) {
-//     return errorResponse(
-//       res,
-//       422,
-//       "error",
-//       "name, email, and password are required",
-//     );
-//   }
+  if (!name || !email || !password) {
+    return errorResponse(
+      res,
+      422,
+      "error",
+      "name, email, and password are required",
+    );
+  }
 
-//   if (password.length < 6) {
-//     return errorResponse(
-//       res,
-//       422,
-//       "error",
-//       "Password must be at least 6 characters",
-//     );
-//   }
+  if (password.length < 6) {
+    return errorResponse(
+      res,
+      422,
+      "error",
+      "Password must be at least 6 characters",
+    );
+  }
 
-//   try {
-//     const connection = await db.getConnection();
+  if (nik && !/^\d{16}$/.test(nik)) {
+    return errorResponse(res, 422, "error", "nik must be exactly 16 digits");
+  }
 
-//     // Check if email exists
-//     const [existing] = await connection.query(
-//       "SELECT id FROM citizen_citizens WHERE email = ?",
-//       [email],
-//     );
+  if (!Number.isInteger(Number(zone_id)) || Number(zone_id) < 1) {
+    return errorResponse(res, 422, "error", "zone_id must be a positive integer");
+  }
 
-//     if (existing.length > 0) {
-//       connection.release();
-//       return errorResponse(res, 409, "error", "Email already registered");
-//     }
+  let connection;
+  try {
+    connection = await db.getConnection();
 
-//     // Hash password and create user
-//     const hashedPassword = await hashPassword(password);
-//     const [result] = await connection.query(
-//       "INSERT INTO citizen_citizens (name, email, password, oauth_provider, is_active) VALUES (?, ?, ?, ?, TRUE)",
-//       [name, email, hashedPassword, "local"],
-//     );
+    const [existing] = await connection.query(
+      "SELECT id FROM citizen_citizens WHERE email = ?",
+      [email],
+    );
 
-//     const userId = result.insertId;
+    if (existing.length > 0) {
+      return errorResponse(res, 409, "error", "Email already registered");
+    }
 
-//     // Generate tokens
-//     const user = { id: userId, email, name, role: "user" };
-//     const accessToken = generateAccessToken(user);
-//     const refreshToken = generateRefreshToken(userId);
+    let citizenNik = nik;
+    if (!citizenNik) {
+      do {
+        citizenNik = `${Date.now()}${Math.floor(Math.random() * 1000)
+          .toString()
+          .padStart(3, "0")}`.slice(-16);
 
-//     // Save refresh token
-//     const expiresAt = new Date();
-//     expiresAt.setDate(expiresAt.getDate() + 7);
+        const [nikExists] = await connection.query(
+          "SELECT id FROM citizen_citizens WHERE nik = ?",
+          [citizenNik],
+        );
 
-//     await connection.query(
-//       "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
-//       [userId, refreshToken, expiresAt],
-//     );
+        if (nikExists.length === 0) break;
+      } while (true);
+    }
 
-//     connection.release();
+    const hashedPassword = await hashPassword(password);
+    const [result] = await connection.query(
+      "INSERT INTO citizen_citizens (nik, name, email, password, phone, zone_id, role, oauth_provider, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE)",
+      [
+        citizenNik,
+        name,
+        email,
+        hashedPassword,
+        phone,
+        Number(zone_id),
+        "citizen",
+        "local",
+      ],
+    );
 
-//     return res.status(201).json({
-//       status: "success",
-//       code: 201,
-//       data: {
-//         user: {
-//           id: userId,
-//           name,
-//           email,
-//         },
-//         access_token: accessToken,
-//         refresh_token: refreshToken,
-//         token_type: "Bearer",
-//       },
-//       message: "User registered successfully",
-//       timestamp: new Date().toISOString(),
-//       service: "auth",
-//     });
-//   } catch (error) {
-//     console.error("Registration error:", error);
-//     errorResponse(res, 500, "error", "Registration failed");
-//   }
-// });
+    const userId = result.insertId;
+    const user = { id: userId, email, name, role: "citizen" };
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(userId);
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    await connection.query(
+      "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
+      [userId, refreshToken, expiresAt],
+    );
+
+    return res.status(201).json({
+      status: "success",
+      code: 201,
+      data: {
+        user: {
+          id: userId,
+          nik: citizenNik,
+          name,
+          email,
+          phone,
+          zone_id: Number(zone_id),
+          role: "citizen",
+        },
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        token_type: "Bearer",
+      },
+      message: "User registered successfully",
+      timestamp: new Date().toISOString(),
+      service: "auth",
+    });
+  } catch (error) {
+    console.error("Registration error:", error);
+    errorResponse(res, 500, "error", "Registration failed");
+  } finally {
+    if (connection) connection.release();
+  }
+});
 
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
