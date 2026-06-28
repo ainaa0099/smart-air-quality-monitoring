@@ -382,6 +382,62 @@ const createServiceProxy = (targetUrl) => {
   });
 };
 
+const roleFromRequest = (req) => req.user?.role || "unknown";
+
+const forbiddenRoleResponse = (req, res) => {
+  return res.status(403).json({
+    status: "error",
+    code: 403,
+    message: `Forbidden: ${roleFromRequest(req)} role is not allowed to access this endpoint`,
+    timestamp: new Date().toISOString(),
+    service: "gateway",
+  });
+};
+
+const adminOnly = (req, res, next) => {
+  if (roleFromRequest(req) === "admin") {
+    return next();
+  }
+
+  return forbiddenRoleResponse(req, res);
+};
+
+const adminOrCitizen = (req, res, next) => {
+  if (["admin", "citizen"].includes(roleFromRequest(req))) {
+    return next();
+  }
+
+  return forbiddenRoleResponse(req, res);
+};
+
+const citizenNotificationAccess = (req, res, next) => {
+  const role = roleFromRequest(req);
+
+  if (role === "admin") {
+    return next();
+  }
+
+  if (role === "citizen" && ["GET", "PATCH"].includes(req.method)) {
+    return next();
+  }
+
+  return forbiddenRoleResponse(req, res);
+};
+
+const citizenProfileAccess = (req, res, next) => {
+  const role = roleFromRequest(req);
+
+  if (role === "admin") {
+    return next();
+  }
+
+  if (role === "citizen" && ["GET", "PUT"].includes(req.method)) {
+    return next();
+  }
+
+  return forbiddenRoleResponse(req, res);
+};
+
 const protectedMiddleware = [ipRateLimiter, introspectToken, tokenRateLimiter];
 
 // app.post(
@@ -391,46 +447,55 @@ const protectedMiddleware = [ipRateLimiter, introspectToken, tokenRateLimiter];
 app.use(
   "/api/citizens",
   protectedMiddleware,
+  citizenProfileAccess,
   createServiceProxy(process.env.CITIZEN_SERVICE_URL),
 );
 app.use(
   "/api/reports",
   protectedMiddleware,
+  adminOrCitizen,
   createServiceProxy(process.env.CITIZEN_SERVICE_URL),
 );
 app.use(
   "/api/notifications",
   protectedMiddleware,
+  citizenNotificationAccess,
   createServiceProxy(process.env.CITIZEN_SERVICE_URL),
 );
 app.use(
   "/api/airquality",
   protectedMiddleware,
+  adminOnly,
   createServiceProxy(process.env.AIRQUALITY_SERVICE_URL),
 );
 app.use(
   "/api/environment",
   protectedMiddleware,
+  adminOnly,
   createServiceProxy(process.env.ENVIRONMENT_SERVICE_URL),
 );
 app.use(
   "/predict",
   protectedMiddleware,
+  adminOnly,
   createServiceProxy(process.env.PYTHON_ML_SERVICE_URL),
 );
 app.use(
   "/detect",
   protectedMiddleware,
+  adminOnly,
   createServiceProxy(process.env.PYTHON_ML_SERVICE_URL),
 );
 app.use(
   "/iot/airquality",
   protectedMiddleware,
+  adminOnly,
   createServiceProxy(process.env.AIRQUALITY_SERVICE_URL),
 );
 app.use(
   "/iot/weather",
   protectedMiddleware,
+  adminOnly,
   createServiceProxy(process.env.ENVIRONMENT_SERVICE_URL),
 );
 
