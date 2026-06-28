@@ -34,6 +34,7 @@ class Weather
 
     public function getCurrent(): array
     {
+        // Ambil satu data cuaca terbaru untuk setiap zona.
         $stmt = $this->db->query("
             SELECT ew.*
             FROM env_weather ew

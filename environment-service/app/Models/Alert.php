@@ -60,6 +60,7 @@ class Alert
 
     public function getLatestPerZone()
     {
+        // Dipakai jika service lain butuh status alert terakhir dari masing-masing zona.
         $stmt = $this->db->query("
             SELECT a.*
             FROM env_alerts a

@@ -9,11 +9,19 @@ class RabbitMQ
 {
     public static function publish($queue, $data)
     {
+        // Konfigurasi broker dibuat fleksibel agar bisa jalan lokal maupun di Docker Compose.
+        $host = $_ENV['RABBITMQ_HOST'] ?? getenv('RABBITMQ_HOST') ?: '127.0.0.1';
+        $port = (int) ($_ENV['RABBITMQ_PORT'] ?? getenv('RABBITMQ_PORT') ?: 5672);
+        $user = $_ENV['RABBITMQ_USER'] ?? getenv('RABBITMQ_USER') ?: 'guest';
+        $pass = $_ENV['RABBITMQ_PASS'] ?? getenv('RABBITMQ_PASS') ?: 'guest';
+        $vhost = $_ENV['RABBITMQ_VHOST'] ?? getenv('RABBITMQ_VHOST') ?: '/';
+
         $connection = new AMQPStreamConnection(
-            'localhost',
-            5672,
-            'guest',
-            'guest'
+            $host,
+            $port,
+            $user,
+            $pass,
+            $vhost
         );
 
         $channel = $connection->channel();

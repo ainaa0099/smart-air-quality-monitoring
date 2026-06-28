@@ -10,16 +10,18 @@ require_once __DIR__ . '/app/Config/Database.php';
 use PhpAmqpLib\Connection\AMQPStreamConnection;
 
 $connection = new AMQPStreamConnection(
-    $_ENV['RABBITMQ_HOST'],
-    (int) $_ENV['RABBITMQ_PORT'],
-    $_ENV['RABBITMQ_USER'],
-    $_ENV['RABBITMQ_PASS']
+    $_ENV['RABBITMQ_HOST'] ?? getenv('RABBITMQ_HOST') ?: '127.0.0.1',
+    (int) ($_ENV['RABBITMQ_PORT'] ?? getenv('RABBITMQ_PORT') ?: 5672),
+    $_ENV['RABBITMQ_USER'] ?? getenv('RABBITMQ_USER') ?: 'guest',
+    $_ENV['RABBITMQ_PASS'] ?? getenv('RABBITMQ_PASS') ?: 'guest',
+    $_ENV['RABBITMQ_VHOST'] ?? getenv('RABBITMQ_VHOST') ?: '/'
 );
 
 $channel = $connection->channel();
 
+// Consumer mendengar alert hasil analisis ML lewat topic exchange yang sama dengan service lain.
 $channel->exchange_declare(
-    'city.events',
+    $_ENV['RABBITMQ_EXCHANGE'] ?? getenv('RABBITMQ_EXCHANGE') ?: 'city.events',
     'topic',
     false,
     true,
@@ -36,7 +38,7 @@ $channel->queue_declare(
 
 $channel->queue_bind(
     'anomaly.alert',
-    'city.events',
+    $_ENV['RABBITMQ_EXCHANGE'] ?? getenv('RABBITMQ_EXCHANGE') ?: 'city.events',
     'anomaly.alert'
 );
 
@@ -50,6 +52,20 @@ $callback = function ($msg) {
         if (!$data) {
             throw new Exception("Payload JSON tidak valid.");
         }
+
+        $data = $data['data'] ?? $data;
+
+        // Minimal perlu zone_id agar alert bisa ditempel ke zona kota yang benar.
+        foreach (['zone_id'] as $requiredField) {
+            if (!isset($data[$requiredField])) {
+                throw new Exception("Field {$requiredField} wajib ada di payload anomaly.alert.");
+            }
+        }
+
+        $pollutant = $data['pollutant'] ?? 'AQI';
+        $value = isset($data['value']) ? (float) $data['value'] : 0.0;
+        $threshold = isset($data['threshold']) ? (float) $data['threshold'] : 0.0;
+        $severity = $data['severity'] ?? 'Normal';
 
         echo "Received: {$msg->body}" . PHP_EOL;
 
@@ -75,21 +91,22 @@ $callback = function ($msg) {
             $data['alert_type'] ?? 'Air Quality',
             $data['pollutant'] ?? null,
             $data['anomaly_score'] ?? null,
-            $data['severity'] ?? 'Normal',
+            $severity,
             $data['value'] ?? null,
             $data['threshold'] ?? null,
             $data['created_at'] ?? date('Y-m-d H:i:s')
         ]);
 
-        switch ($data['severity'] ?? 'Normal') {
+        // Notifikasi dibuat pendek supaya mudah ditampilkan oleh gateway atau dashboard.
+        switch ($severity) {
 
             case 'Kritis':
                 $notification = sprintf(
                     "KRITIS\nZona %d: %s = %.2f (batas %.2f).\nHindari aktivitas luar, gunakan masker, dan tetap di dalam ruangan.",
                     $data['zone_id'],
-                    $data['pollutant'],
-                    $data['value'],
-                    $data['threshold']
+                    $pollutant,
+                    $value,
+                    $threshold
                 );
                 break;
 
@@ -97,9 +114,9 @@ $callback = function ($msg) {
                 $notification = sprintf(
                     "PERINGATAN\nZona %d: %s = %.2f (batas %.2f).\nKurangi aktivitas luar dan gunakan masker bila diperlukan.",
                     $data['zone_id'],
-                    $data['pollutant'],
-                    $data['value'],
-                    $data['threshold']
+                    $pollutant,
+                    $value,
+                    $threshold
                 );
                 break;
 
@@ -107,25 +124,31 @@ $callback = function ($msg) {
                 $notification = sprintf(
                     "NORMAL\nZona %d: %s = %.2f. Kondisi masih aman.",
                     $data['zone_id'],
-                    $data['pollutant'],
-                    $data['value']
+                    $pollutant,
+                    $value
                 );
         }
 
         $stmtNotif = $db->prepare("
             INSERT INTO env_zone_status (
                 zone_id,
+                alert_type,
+                severity,
                 notification,
                 created_at
             )
-            VALUES (?, ?, ?)
+            VALUES (?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
+                alert_type = VALUES(alert_type),
+                severity = VALUES(severity),
                 notification = VALUES(notification),
                 created_at = VALUES(created_at)
         ");
 
         $stmtNotif->execute([
             $data['zone_id'],
+            $data['alert_type'] ?? 'Air Quality',
+            $severity,
             $notification,
             $data['created_at'] ?? date('Y-m-d H:i:s')
         ]);

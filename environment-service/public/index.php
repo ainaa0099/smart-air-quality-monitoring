@@ -4,6 +4,8 @@ require_once '../app/Config/Env.php';
 
 Env::load(__DIR__ . '/../.env');
 
+header('Content-Type: application/json');
+
 require_once '../app/Config/Database.php';
 
 require_once '../app/Models/Weather.php';
@@ -19,6 +21,7 @@ $uri = parse_url(
     PHP_URL_PATH
 );
 
+// Routing sederhana untuk endpoint environment-service.
 if ($uri == '/api/environment/weather'
     && $_SERVER['REQUEST_METHOD'] == 'POST') {
 
