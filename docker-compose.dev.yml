@@ -1,0 +1,43 @@
+services:
+  # Override development untuk Citizen Service.
+  # Source code di-bind mount agar perubahan lokal langsung terbaca container.
+  citizen-service:
+    environment:
+      APP_ENV: development
+    volumes:
+      - ./php-citizen:/app
+      - /app/vendor
+    command: php -S 0.0.0.0:8000 -t public/
+
+  # Override development untuk ML Service.
+  # Uvicorn memakai --reload agar FastAPI restart otomatis saat kode berubah.
+  ml-service:
+    environment:
+      APP_ENV: development
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - ./ml-service:/app
+    command: >
+      sh -c "python train_models.py &&
+             uvicorn app:app --host 0.0.0.0 --port 5000 --reload"
+
+  # Override development untuk simulator agar memakai source ml-service lokal.
+  iot-simulator:
+    volumes:
+      - ./ml-service:/app
+
+  # Port database dibuka ke host agar bisa dicek dari DB client lokal.
+  mysql:
+    ports:
+      - "3306:3306"
+
+  # Port RabbitMQ AMQP dan dashboard management dibuka ke host.
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  # Port MQTT broker dibuka ke host untuk testing publish/subscribe lokal.
+  mosquitto:
+    ports:
+      - "1883:1883"
