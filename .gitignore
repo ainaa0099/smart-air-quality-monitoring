@@ -1,7 +1,65 @@
-# Abaikan file environment yang berisi secret
+# Environment
 .env
+.env.*
+!.env.example
 
-# Abaikan folder dependensi Node.js
-/node_modules
-/services/auth/node_modules
-/gateway/node_modules
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencies
+node_modules/
+*/node_modules/
+vendor/
+*/vendor/
+
+# PHP Composer
+composer.phar
+
+# Python
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ML artifacts
+ml-service/models/
+*.pkl
+*.joblib
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# Build output
+dist/
+build/
+coverage/
+
+# Docker/local volumes
+node-red-data/
+grafana-data/
+prometheus-data/
+mysql-data/
+rabbitmq-data/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/

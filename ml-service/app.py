@@ -22,7 +22,10 @@ RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "city.events")
 def load_models_and_start_consumer():
     global MODELS
     if not os.path.exists(MODEL_PATH):
-        raise RuntimeError(f"File model tidak ditemukan di {MODEL_PATH}. Jalankan train_models.py terlebih dahulu.")
+        print(f"File model tidak ditemukan di {MODEL_PATH}. Melatih model dari dataset lokal...")
+        from train_models import create_targets_and_train
+
+        create_targets_and_train()
         
     with open(MODEL_PATH, "rb") as f:
         MODELS = pickle.load(f)
