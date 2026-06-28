@@ -32,6 +32,7 @@ $notifController   = new NotifController();
 $routes = [
     'GET'    => [
         '#^/health$#'                       => fn() => healthCheck(),
+        '#^/metrics$#' => fn() => require __DIR__ . '/metrics.php',
         '#^/api/citizens/(\d+)$#'           => fn($id) => $citizenController->show((int) $id),
         '#^/api/reports$#'                  => fn() => $reportController->index([
             'status'     => $query['status'] ?? null,

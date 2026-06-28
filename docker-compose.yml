@@ -1,282 +1,589 @@
-name: smart-air-quality-monitoring
-
 services:
-  # 1. Database Service (MySQL)
-  # Dipakai oleh citizen-service. Schema dan seed dari folder database/main
-  # akan otomatis di-import saat volume database masih kosong.
+
+  # ==========================================================
+  # MySQL
+  # ==========================================================
   mysql:
-    image: mysql:8.0
+    image: mysql:8.4
+
     container_name: smartcity-mysql
+
     restart: unless-stopped
+
     environment:
       MYSQL_DATABASE: smartcity
+      MYSQL_ROOT_PASSWORD: ""
       MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+
     ports:
       - "3306:3306"
+
     volumes:
       - mysql-data:/var/lib/mysql
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot"]
+      test: ["CMD","mysqladmin","ping","-h","localhost"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
+
     networks:
       - smartcity-net
 
-  # 2. Message Broker Service (RabbitMQ)
-  # Dipakai untuk publish/consume event antar-service, misalnya report.submitted
-  # dari citizen-service dan anomaly.alert dari ml-service.
+
+
+  # ==========================================================
+  # RabbitMQ
+  # ==========================================================
   rabbitmq:
     image: rabbitmq:3-management
+
     container_name: smartcity-rabbitmq
+
     restart: unless-stopped
+
+    env_file:
+      - .env
+
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+
     ports:
       - "5672:5672"
       - "15672:15672"
+
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD","rabbitmq-diagnostics","ping"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 20s
+
     networks:
       - smartcity-net
 
-  # 3. MQTT Broker Service (Mosquitto)
-  # Dipakai oleh simulator IoT pada ml-service untuk mengirim data sensor
-  # ke topic MQTT seperti city/zone1/airquality.
+
+
+  # ==========================================================
+  # Mosquitto MQTT
+  # ==========================================================
   mosquitto:
     image: eclipse-mosquitto:2
+
     container_name: smartcity-mosquitto
+
     restart: unless-stopped
-    command: mosquitto -c /mosquitto-no-auth.conf
+
     ports:
       - "1883:1883"
+
+    volumes:
+      - ./iot/mosquitto.conf:/mosquitto/config/mosquitto.conf
+
     networks:
       - smartcity-net
 
-  # 4. OAuth / Auth Service (Node.js)
-  # Menyediakan endpoint login, register, token, introspect, dan revoke.
-  auth-service:
+
+
+  # ==========================================================
+  # OAuth / Auth Service
+  # ==========================================================
+  auth:
+    container_name: smartcity-auth
+
     build:
       context: ./services/auth
       dockerfile: Dockerfile
-    container_name: smartcity-auth-service
+
     restart: unless-stopped
+
+    env_file:
+      - .env
+
     environment:
-      NODE_ENV: production
-      PORT: 3002
-      DB_HOST: mysql
-      DB_USER: root
-      DB_PASSWORD: ""
-      DB_NAME: smartcity
-      DB_PORT: 3306
-      CORS_ORIGIN: "*"
-      JWT_ACCESS_SECRET: UAS_SE-2_2026_A
-      JWT_REFRESH_SECRET: UAS_SE-2_2026_A
-      JWT_ACCESS_EXPIRES: 15m
-      JWT_REFRESH_EXPIRES: 7d
-      GATEWAY_INTERNAL_SECRET: smartcity_internal_secret
-      FRONTEND_SUCCESS_URL: http://localhost:3000/auth/success
-      FRONTEND_ERROR_URL: http://localhost:3000/auth/error
-      GOOGLE_CALLBACK_URL: http://localhost:3000/api/auth/callback/google
-      GITHUB_CALLBACK_URL: http://localhost:3000/api/auth/callback/github
-      FACEBOOK_CALLBACK_URL: http://localhost:3000/api/auth/callback/facebook
+      PORT: ${PORT_AUTH}
+
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+
+      GATEWAY_INTERNAL_SECRET: ${GATEWAY_INTERNAL_SECRET}
+
     ports:
       - "3002:3002"
+
     depends_on:
       mysql:
         condition: service_healthy
+
+    # TODO:
+    # node:18-alpine tidak memiliki wget/curl secara default.
+    # Tambahkan wget/curl pada Dockerfile Auth,
+    # lalu aktifkan healthcheck berikut.
+
+    # healthcheck:
+    #   test: ["CMD","wget","--spider","-q","http://localhost:3002/health"]
+    #   interval: 15s
+    #   timeout: 5s
+    #   retries: 10
+
     networks:
       - smartcity-net
 
-  # 5. API Gateway (Node.js)
-  # Pintu masuk utama untuk Postman dan client aplikasi.
-  gateway:
-    build:
-      context: ./gateway
-      dockerfile: Dockerfile
-    container_name: smartcity-gateway
-    restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      OAUTH_SERVER_URL: http://auth-service:3002
-      AUTH_SERVICE_URL: http://auth-service:3002
-      CITIZEN_SERVICE_URL: http://citizen-service:8000
-      AIRQUALITY_SERVICE_URL: http://airquality-service:8001
-      ENVIRONMENT_SERVICE_URL: http://environment-service:8002
-      PYTHON_ML_SERVICE_URL: http://ml-service:5000
-      CORS_ORIGIN: "*"
-      GATEWAY_INTERNAL_SECRET: smartcity_internal_secret
-    ports:
-      - "3000:3000"
-    depends_on:
-      auth-service:
-        condition: service_started
-      citizen-service:
-        condition: service_started
-      ml-service:
-        condition: service_started
-    networks:
-      - smartcity-net
 
-  # 6. Citizen Service (PHP 8.2)
-  # Service ini ada di folder php-citizen pada branch main.
-  # Endpoint utama berjalan di port 8000 dan memakai MySQL + RabbitMQ.
+
+  # ==========================================================
+  # Citizen Service
+  # ==========================================================
   citizen-service:
+
+    container_name: smartcity-citizen
+
     build:
       context: ./php-citizen
       dockerfile: Dockerfile
-    container_name: smartcity-citizen-service
+
     restart: unless-stopped
+
+    env_file:
+      - .env
+
     environment:
-      APP_ENV: production
-      APP_PORT: 8000
-      DB_HOST: mysql
-      DB_NAME: smartcity
-      DB_USER: root
-      DB_PASS: ""
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: 5672
-      RABBITMQ_USER: guest
-      RABBITMQ_PASS: guest
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+
+      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      RABBITMQ_PORT: ${RABBITMQ_PORT}
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASS: ${RABBITMQ_PASS}
+
     ports:
       - "8000:8000"
+
     depends_on:
       mysql:
         condition: service_healthy
+
       rabbitmq:
         condition: service_healthy
+
+    healthcheck:
+      test: ["CMD","curl","-f","http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
     networks:
       - smartcity-net
 
-  # 7. Air Quality Service (PHP 8.2)
+
+
+  # ==========================================================
+  # Air Quality Service
+  # ==========================================================
   airquality-service:
+
+    container_name: smartcity-airquality
+
     build:
       context: ./air-quality-service
       dockerfile: Dockerfile
-    container_name: smartcity-airquality-service
+
     restart: unless-stopped
+
+    env_file:
+      - .env
+
     environment:
-      APP_ENV: production
-      APP_PORT: 8001
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_NAME: smartcity
-      DB_USER: root
-      DB_PASS: ""
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: 5672
-      RABBITMQ_USER: guest
-      RABBITMQ_PASS: guest
-      RABBITMQ_VHOST: /
-      RABBITMQ_EXCHANGE: city.events
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+
+      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      RABBITMQ_PORT: ${RABBITMQ_PORT}
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASS: ${RABBITMQ_PASS}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
+
     ports:
       - "8001:8001"
+
     depends_on:
       mysql:
         condition: service_healthy
+
       rabbitmq:
         condition: service_healthy
+
+    # TODO:
+    # Dockerfile Air Quality belum meng-install curl/wget.
+    # Setelah ditambahkan, aktifkan healthcheck.
+
+    # healthcheck:
+    #   test: ["CMD","wget","--spider","-q","http://localhost:8001/health"]
+    #   interval: 15s
+    #   timeout: 5s
+    #   retries: 10
+
     networks:
       - smartcity-net
 
-  # 8. Environment Service (PHP 8.2)
+  # ==========================================================
+  # Environment Service
+  # ==========================================================
   environment-service:
+
+    container_name: smartcity-environment
+
     build:
       context: ./environment-service
       dockerfile: Dockerfile
-    container_name: smartcity-environment-service
+
     restart: unless-stopped
+
+    env_file:
+      - .env
+
     environment:
-      APP_ENV: production
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_NAME: smartcity
-      DB_USER: root
-      DB_PASS: ""
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: 5672
-      RABBITMQ_USER: guest
-      RABBITMQ_PASS: guest
-      RABBITMQ_VHOST: /
-      RABBITMQ_EXCHANGE: city.events
-      SERVICE_PORT: 8002
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+
+      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      RABBITMQ_PORT: ${RABBITMQ_PORT}
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASS: ${RABBITMQ_PASS}
+
     ports:
       - "8002:8002"
+
     depends_on:
       mysql:
         condition: service_healthy
+
       rabbitmq:
         condition: service_healthy
+
+    # TODO
+    # Aktifkan jika Dockerfile sudah memiliki curl/wget
+    #
+    # healthcheck:
+    #   test: ["CMD","curl","-f","http://localhost:8002/health"]
+    #   interval: 15s
+    #   timeout: 5s
+    #   retries: 10
+
     networks:
       - smartcity-net
 
-  # 9. Machine Learning Service (FastAPI)
-  # Service ini ada di folder ml-service pada branch main.
-  # Command menjalankan training model dulu agar app.py menemukan
-  # models/smartcity_models.pkl saat FastAPI start.
-  ml-service:
+
+
+  # ==========================================================
+  # Environment Consumer
+  # ==========================================================
+  environment-consumer:
+
+    container_name: smartcity-environment-consumer
+
+    build:
+      context: ./environment-service
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    command: php consumer.php
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+      rabbitmq:
+        condition: service_healthy
+
+      environment-service:
+        condition: service_started
+
+    networks:
+      - smartcity-net
+
+
+
+  # ==========================================================
+  # Python Machine Learning Service
+  # ==========================================================
+  python-ml:
+
+    container_name: smartcity-python-ml
+
     build:
       context: ./ml-service
       dockerfile: Dockerfile
-    container_name: smartcity-ml-service
+
     restart: unless-stopped
-    command: >
-      sh -c "python train_models.py &&
-             uvicorn app:app --host 0.0.0.0 --port 5000"
+
+    env_file:
+      - .env
+
     environment:
-      PORT: 5000
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_EXCHANGE: city.events
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
+      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
+
+    command: >
+      sh -c "
+        python generate_dataset.py &&
+        python train_models.py &&
+        uvicorn app:app --host 0.0.0.0 --port 5000
+      "
+
     ports:
       - "5000:5000"
+
     depends_on:
       rabbitmq:
         condition: service_healthy
-      mosquitto:
-        condition: service_started
+
+    # TODO
+    # Aktifkan jika endpoint /health sudah tersedia
+    #
+    # healthcheck:
+    #   test: ["CMD","curl","-f","http://localhost:5000/health"]
+
     networks:
       - smartcity-net
 
-  # 10. IoT Simulator (opsional)
-  # Menggunakan kode simulator.py dari ml-service.
-  # Tidak otomatis jalan; aktifkan dengan profile simulator.
+
+
+  # ==========================================================
+  # IoT Simulator
+  # ==========================================================
   iot-simulator:
+
+    container_name: smartcity-iot-simulator
+
     build:
       context: ./ml-service
       dockerfile: Dockerfile
-    container_name: smartcity-iot-simulator
+
     restart: unless-stopped
+
+    env_file:
+      - .env
+
     command: python simulator.py
-    profiles:
-      - simulator
+
     environment:
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
+      MQTT_HOST: ${MQTT_HOST}
+      MQTT_PORT: ${MQTT_PORT}
+
     depends_on:
       mosquitto:
         condition: service_started
+
     networks:
       - smartcity-net
 
-# Volume permanen agar data MySQL dan RabbitMQ tidak hilang saat container restart.
+
+
+  # ==========================================================
+  # API Gateway
+  # ==========================================================
+  api-gateway:
+
+    container_name: smartcity-api-gateway
+
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      PORT: ${PORT_GATEWAY}
+
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
+      OAUTH_SERVER_URL: ${OAUTH_SERVER_URL}
+
+      CITIZEN_SERVICE_URL: ${CITIZEN_SERVICE_URL}
+      AIRQUALITY_SERVICE_URL: ${AIRQUALITY_SERVICE_URL}
+      ENVIRONMENT_SERVICE_URL: ${ENVIRONMENT_SERVICE_URL}
+      PYTHON_ML_SERVICE_URL: ${PYTHON_ML_SERVICE_URL}
+
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+
+      GATEWAY_INTERNAL_SECRET: ${GATEWAY_INTERNAL_SECRET}
+
+      CORS_ORIGIN: ${CORS_ORIGIN}
+
+    ports:
+      - "3000:3000"
+
+    depends_on:
+      auth:
+        condition: service_started
+
+      citizen-service:
+        condition: service_started
+
+      airquality-service:
+        condition: service_started
+
+      environment-service:
+        condition: service_started
+
+      python-ml:
+        condition: service_started
+
+    # TODO
+    # node:18-alpine tidak memiliki curl/wget secara default.
+    # Tambahkan utility tersebut pada Dockerfile jika ingin
+    # mengaktifkan healthcheck.
+    #
+    # healthcheck:
+    #   test: ["CMD","wget","--spider","-q","http://localhost:3000/health"]
+
+    networks:
+      - smartcity-net
+
+  # ==========================================================
+  # Node-RED
+  # ==========================================================
+  node-red:
+
+    image: nodered/node-red:latest
+
+    container_name: smartcity-node-red
+
+    restart: unless-stopped
+
+    ports:
+      - "1880:1880"
+
+    environment:
+      TZ: Asia/Jakarta
+
+    volumes:
+      - ./iot/node-red-data:/data
+
+    depends_on:
+      mosquitto:
+        condition: service_started
+
+      api-gateway:
+        condition: service_started
+
+    networks:
+      - smartcity-net
+
+
+
+  # ==========================================================
+  # Prometheus
+  # ==========================================================
+  prometheus:
+
+    image: prom/prometheus:latest
+
+    container_name: smartcity-prometheus
+
+    restart: unless-stopped
+
+    ports:
+      - "9090:9090"
+
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+      auth:
+        condition: service_started
+
+    networks:
+      - smartcity-net
+
+
+
+  # ==========================================================
+  # Grafana
+  # ==========================================================
+  grafana:
+
+    image: grafana/grafana:latest
+
+    container_name: smartcity-grafana
+
+    restart: unless-stopped
+
+    ports:
+      - "3001:3000"
+
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+    depends_on:
+      prometheus:
+        condition: service_started
+
+    networks:
+      - smartcity-net
+
+
+
+# ==========================================================
+# Network
+# ==========================================================
+
+networks:
+
+  smartcity-net:
+
+    driver: bridge
+
+
+
+# ==========================================================
+# Docker Volumes
+# ==========================================================
+
 volumes:
+
   mysql-data:
+
   rabbitmq-data:
 
-# Network internal agar semua service bisa saling akses pakai nama service.
-networks:
-  smartcity-net:
-    driver: bridge
+  grafana-data:
