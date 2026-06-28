@@ -4,7 +4,7 @@ services:
   # MySQL
   # ==========================================================
   mysql:
-    image: mysql:8.4
+    image: mysql:8.0
 
     container_name: smartcity-mysql
 
@@ -351,9 +351,11 @@ services:
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE}
 
     command: >
-      uvicorn app:app
-      --host 0.0.0.0
-      --port 5000
+      sh -c "
+        python generate_dataset.py &&
+        python train_models.py &&
+        uvicorn app:app --host 0.0.0.0 --port 5000
+      "
 
     ports:
       - "5000:5000"
