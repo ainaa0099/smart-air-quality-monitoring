@@ -63,7 +63,73 @@ services:
     networks:
       - smartcity-net
 
-  # 4. Citizen Service (PHP 8.2)
+  # 4. OAuth / Auth Service (Node.js)
+  # Menyediakan endpoint login, register, token, introspect, dan revoke.
+  auth-service:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    container_name: smartcity-auth-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      DB_HOST: mysql
+      DB_USER: root
+      DB_PASSWORD: ""
+      DB_NAME: smartcity
+      DB_PORT: 3306
+      CORS_ORIGIN: "*"
+      JWT_ACCESS_SECRET: UAS_SE-2_2026_A
+      JWT_REFRESH_SECRET: UAS_SE-2_2026_A
+      JWT_ACCESS_EXPIRES: 15m
+      JWT_REFRESH_EXPIRES: 7d
+      GATEWAY_INTERNAL_SECRET: smartcity_internal_secret
+      FRONTEND_SUCCESS_URL: http://localhost:3000/auth/success
+      FRONTEND_ERROR_URL: http://localhost:3000/auth/error
+      GOOGLE_CALLBACK_URL: http://localhost:3000/api/auth/callback/google
+      GITHUB_CALLBACK_URL: http://localhost:3000/api/auth/callback/github
+      FACEBOOK_CALLBACK_URL: http://localhost:3000/api/auth/callback/facebook
+    ports:
+      - "3002:3002"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - smartcity-net
+
+  # 5. API Gateway (Node.js)
+  # Pintu masuk utama untuk Postman dan client aplikasi.
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: smartcity-gateway
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      OAUTH_SERVER_URL: http://auth-service:3002
+      AUTH_SERVICE_URL: http://auth-service:3002
+      CITIZEN_SERVICE_URL: http://citizen-service:8000
+      AIRQUALITY_SERVICE_URL: http://airquality-service:8001
+      ENVIRONMENT_SERVICE_URL: http://environment-service:8002
+      PYTHON_ML_SERVICE_URL: http://ml-service:5000
+      CORS_ORIGIN: "*"
+      GATEWAY_INTERNAL_SECRET: smartcity_internal_secret
+    ports:
+      - "3000:3000"
+    depends_on:
+      auth-service:
+        condition: service_started
+      citizen-service:
+        condition: service_started
+      ml-service:
+        condition: service_started
+    networks:
+      - smartcity-net
+
+  # 6. Citizen Service (PHP 8.2)
   # Service ini ada di folder php-citizen pada branch main.
   # Endpoint utama berjalan di port 8000 dan memakai MySQL + RabbitMQ.
   citizen-service:
@@ -93,7 +159,69 @@ services:
     networks:
       - smartcity-net
 
-  # 5. Machine Learning Service (FastAPI)
+  # 7. Air Quality Service (PHP 8.2)
+  airquality-service:
+    build:
+      context: ./air-quality-service
+      dockerfile: Dockerfile
+    container_name: smartcity-airquality-service
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_PORT: 8001
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: smartcity
+      DB_USER: root
+      DB_PASS: ""
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASS: guest
+      RABBITMQ_VHOST: /
+      RABBITMQ_EXCHANGE: city.events
+    ports:
+      - "8001:8001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - smartcity-net
+
+  # 8. Environment Service (PHP 8.2)
+  environment-service:
+    build:
+      context: ./environment-service
+      dockerfile: Dockerfile
+    container_name: smartcity-environment-service
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: smartcity
+      DB_USER: root
+      DB_PASS: ""
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASS: guest
+      RABBITMQ_VHOST: /
+      RABBITMQ_EXCHANGE: city.events
+      SERVICE_PORT: 8002
+    ports:
+      - "8002:8002"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - smartcity-net
+
+  # 9. Machine Learning Service (FastAPI)
   # Service ini ada di folder ml-service pada branch main.
   # Command menjalankan training model dulu agar app.py menemukan
   # models/smartcity_models.pkl saat FastAPI start.
@@ -122,7 +250,7 @@ services:
     networks:
       - smartcity-net
 
-  # 6. IoT Simulator (opsional)
+  # 10. IoT Simulator (opsional)
   # Menggunakan kode simulator.py dari ml-service.
   # Tidak otomatis jalan; aktifkan dengan profile simulator.
   iot-simulator:
