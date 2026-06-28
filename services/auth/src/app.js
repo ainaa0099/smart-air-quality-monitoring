@@ -506,6 +506,7 @@ app.post("/register", async (req, res) => {
     password,
     phone = "080000000000",
     zone_id = 1,
+    role = "citizen",
   } = req.body;
 
   if (!name || !email || !password) {
@@ -532,6 +533,11 @@ app.post("/register", async (req, res) => {
 
   if (!Number.isInteger(Number(zone_id)) || Number(zone_id) < 1) {
     return errorResponse(res, 422, "error", "zone_id must be a positive integer");
+  }
+
+  const normalizedRole = String(role).toLowerCase();
+  if (!["admin", "citizen"].includes(normalizedRole)) {
+    return errorResponse(res, 422, "error", "role must be admin or citizen");
   }
 
   let connection;
@@ -573,13 +579,13 @@ app.post("/register", async (req, res) => {
         hashedPassword,
         phone,
         Number(zone_id),
-        "citizen",
+        normalizedRole,
         "local",
       ],
     );
 
     const userId = result.insertId;
-    const user = { id: userId, email, name, role: "citizen" };
+    const user = { id: userId, email, name, role: normalizedRole };
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(userId);
 
@@ -602,7 +608,7 @@ app.post("/register", async (req, res) => {
           email,
           phone,
           zone_id: Number(zone_id),
-          role: "citizen",
+          role: normalizedRole,
         },
         access_token: accessToken,
         refresh_token: refreshToken,

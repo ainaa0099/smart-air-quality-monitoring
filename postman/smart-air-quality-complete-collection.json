@@ -26,7 +26,7 @@
       "name": "OAuth and Auth",
       "item": [
         {
-          "name": "Register User",
+          "name": "Register Admin",
           "event": [
             {
               "listen": "test",
@@ -34,7 +34,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "const json = pm.response.json();",
+                  "if (json.data?.user?.id) pm.collectionVariables.set('admin_id', String(json.data.user.id));",
+                  "if (json.data?.access_token) pm.collectionVariables.set('admin_token', json.data.access_token);",
                   "if (json.data?.access_token) pm.collectionVariables.set('access_token', json.data.access_token);",
+                  "if (json.data?.refresh_token) pm.collectionVariables.set('admin_refresh_token', json.data.refresh_token);",
                   "if (json.data?.refresh_token) pm.collectionVariables.set('refresh_token', json.data.refresh_token);"
                 ]
               }
@@ -45,7 +48,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Dian Puspita Sari\",\n  \"email\": \"dian.puspita.{{$timestamp}}@example.com\",\n  \"password\": \"Rahasia123\",\n  \"nik\": \"317100{{$timestamp}}\",\n  \"phone\": \"08123845{{$randomInt}}\",\n  \"zone_id\": 2\n}"
+              "raw": "{\n  \"name\": \"Dian Puspita Sari\",\n  \"email\": \"dian.puspita.admin@example.com\",\n  \"password\": \"Rahasia123\",\n  \"nik\": \"3171000000009001\",\n  \"phone\": \"081238451901\",\n  \"zone_id\": 2,\n  \"role\": \"admin\"\n}"
             },
             "url": "{{auth_url}}/register"
           }
@@ -72,7 +75,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"grant_type\": \"password\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\",\n  \"username\": \"oki.kusuma1@example.com\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"grant_type\": \"password\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\",\n  \"username\": \"dian.puspita.admin@example.com\",\n  \"password\": \"Rahasia123\"\n}"
             },
             "url": "{{gateway_url}}/oauth/token"
           }
@@ -99,7 +102,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"grant_type\": \"password\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\",\n  \"username\": \"oki.nugroho2@example.com\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"grant_type\": \"password\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\",\n  \"username\": \"rizky.maulana.citizen@example.com\",\n  \"password\": \"Rahasia123\"\n}"
             },
             "url": "{{gateway_url}}/oauth/token"
           }
@@ -169,7 +172,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"oki.nugroho2@example.com\",\n  \"password\": \"password123\"\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"rizky.maulana.citizen@example.com\",\n  \"password\": \"Rahasia123\"\n}" },
             "url": "{{gateway_url}}/api/auth/login"
           }
         },
@@ -182,13 +185,25 @@
       "name": "Citizens",
       "item": [
         { "name": "Citizen Service Health", "request": { "method": "GET", "url": "{{citizen_url}}/health" } },
-        { "name": "Get Citizen By ID", "request": { "method": "GET", "url": "{{gateway_url}}/api/citizens/1" } },
+        { "name": "Get Citizen By ID", "request": { "method": "GET", "url": "{{gateway_url}}/api/citizens/{{citizen_id}}" } },
         {
           "name": "Register Citizen",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.id) pm.collectionVariables.set('citizen_id', String(json.data.id));"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"nik\": \"317100{{$timestamp}}\",\n  \"name\": \"Rizky Maulana Pratama\",\n  \"email\": \"rizky.maulana.{{$timestamp}}@example.com\",\n  \"password\": \"Rahasia123\",\n  \"phone\": \"08127592{{$randomInt}}\",\n  \"zone_id\": 3\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"nik\": \"3171000000009002\",\n  \"name\": \"Rizky Maulana Pratama\",\n  \"email\": \"rizky.maulana.citizen@example.com\",\n  \"password\": \"Rahasia123\",\n  \"phone\": \"081275921902\",\n  \"zone_id\": 3,\n  \"role\": \"citizen\"\n}" },
             "url": "{{citizen_url}}/api/citizens"
           }
         },
@@ -198,23 +213,23 @@
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": { "mode": "raw", "raw": "{\n  \"name\": \"Rizky Maulana Pratama\",\n  \"phone\": \"081275921847\",\n  \"zone_id\": 4\n}" },
-            "url": "{{gateway_url}}/api/citizens/1"
+            "url": "{{gateway_url}}/api/citizens/{{citizen_id}}"
           }
         },
-        { "name": "Delete Citizen", "request": { "method": "DELETE", "url": "{{gateway_url}}/api/citizens/1" } }
+        { "name": "Delete Citizen", "request": { "method": "DELETE", "url": "{{gateway_url}}/api/citizens/{{citizen_id}}" } }
       ]
     },
     {
       "name": "Reports",
       "item": [
-        { "name": "List Reports", "request": { "method": "GET", "url": "{{gateway_url}}/api/reports?status=pending&zone_id=1&citizen_id=1" } },
+        { "name": "List Reports", "request": { "method": "GET", "url": "{{gateway_url}}/api/reports?status=pending&zone_id=1&citizen_id={{citizen_id}}" } },
         { "name": "Get Report By ID", "request": { "method": "GET", "url": "{{gateway_url}}/api/reports/1" } },
         {
           "name": "Create Report",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"citizen_id\": 1,\n  \"category\": \"vehicle_emission\",\n  \"description\": \"Asap kendaraan di sekitar Jalan Sudirman terasa pekat sejak jam berangkat kerja.\",\n  \"zone_id\": 1\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"citizen_id\": \"{{citizen_id}}\",\n  \"category\": \"vehicle_emission\",\n  \"description\": \"Asap kendaraan di sekitar Jalan Sudirman terasa pekat sejak jam berangkat kerja.\",\n  \"zone_id\": 1\n}" },
             "url": "{{gateway_url}}/api/reports"
           }
         },
@@ -233,14 +248,14 @@
     {
       "name": "Notifications",
       "item": [
-        { "name": "List Notifications", "request": { "method": "GET", "url": "{{gateway_url}}/api/notifications?citizen_id=1&unread=true" } },
+        { "name": "List Notifications", "request": { "method": "GET", "url": "{{gateway_url}}/api/notifications?citizen_id={{citizen_id}}&unread=true" } },
         { "name": "Get Notification By ID", "request": { "method": "GET", "url": "{{gateway_url}}/api/notifications/1" } },
         {
           "name": "Create Notification",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"citizen_id\": 1,\n  \"title\": \"Kualitas Udara Menurun\",\n  \"body\": \"Pemantauan sore ini menunjukkan kadar PM2.5 meningkat. Warga disarankan memakai masker saat keluar rumah.\"\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"citizen_id\": \"{{citizen_id}}\",\n  \"title\": \"Kualitas Udara Menurun\",\n  \"body\": \"Pemantauan sore ini menunjukkan kadar PM2.5 meningkat. Warga disarankan memakai masker saat keluar rumah.\"\n}" },
             "url": "{{gateway_url}}/api/notifications"
           }
         },
@@ -250,7 +265,7 @@
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"citizen_id\": 1\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"citizen_id\": \"{{citizen_id}}\"\n}" },
             "url": "{{gateway_url}}/api/notifications/read-all"
           }
         },
@@ -357,8 +372,10 @@
     { "key": "ml_url", "value": "http://localhost:5000" },
     { "key": "access_token", "value": "" },
     { "key": "refresh_token", "value": "" },
+    { "key": "admin_id", "value": "" },
     { "key": "admin_token", "value": "" },
     { "key": "admin_refresh_token", "value": "" },
+    { "key": "citizen_id", "value": "" },
     { "key": "citizen_token", "value": "" },
     { "key": "citizen_refresh_token", "value": "" }
   ]
