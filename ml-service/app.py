@@ -188,6 +188,8 @@ def start_rabbitmq_consumer():
                             "created_at": now.strftime('%Y-%m-%d %H:%M:%S')
                         }
                         
+                        # print("\n=== Publishing anomaly.alert ===")
+                        # print(json.dumps(alert_payload, indent=4))
                         channel.basic_publish(
                             exchange=RABBITMQ_EXCHANGE,
                             routing_key='anomaly.alert',
@@ -209,4 +211,8 @@ def start_rabbitmq_consumer():
 
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 5000))
+    )
