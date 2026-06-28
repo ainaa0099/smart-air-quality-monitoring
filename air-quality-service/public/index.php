@@ -50,6 +50,5 @@ try {
     };
 } catch (Throwable $error) {
     Response::json(null, 500, ($_ENV['APP_ENV'] ?? 'production') === 'development'
-        ? $error->getMessage()
-        : 'Internal server error');
+        ? $error->getMessage() : 'Internal server error');
 }
