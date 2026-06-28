@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: oauth-server
-          image: ghcr.io/ainaa0099/smartcity-auth:latest
+          image: ghcr.io/ainaa0099/smartcity-oauth-server:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3002
@@ -180,7 +180,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          image: ghcr.io/ainaa0099/smartcity-gateway:latest
+          image: ghcr.io/ainaa0099/smartcity-api-gateway:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000

@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: citizen-service
-          image: ghcr.io/ainaa0099/smartcity-citizen:latest
+          image: ghcr.io/ainaa0099/smartcity-citizen-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
@@ -83,7 +83,7 @@ spec:
     spec:
       containers:
         - name: airquality-service
-          image: ghcr.io/ainaa0099/smartcity-airquality:latest
+          image: ghcr.io/ainaa0099/smartcity-airquality-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8001
@@ -156,7 +156,7 @@ spec:
     spec:
       containers:
         - name: environment-service
-          image: ghcr.io/ainaa0099/smartcity-environment:latest
+          image: ghcr.io/ainaa0099/smartcity-environment-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8002
@@ -219,7 +219,7 @@ spec:
     spec:
       containers:
         - name: environment-consumer
-          image: ghcr.io/ainaa0099/smartcity-environment:latest
+          image: ghcr.io/ainaa0099/smartcity-environment-service:latest
           imagePullPolicy: IfNotPresent
           command: ["php"]
           args: ["consumer.php"]

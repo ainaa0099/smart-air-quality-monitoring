@@ -37,6 +37,8 @@ spec:
                 configMapKeyRef:
                   name: smartcity-config
                   key: RABBITMQ_EXCHANGE
+            - name: MODEL_PATH
+              value: "/app/models/smartcity_models.pkl"
           resources:
             requests:
               cpu: 250m
@@ -84,7 +86,7 @@ spec:
     spec:
       containers:
         - name: iot-simulator
-          image: ghcr.io/ainaa0099/smartcity-python-ml:latest
+          image: ghcr.io/ainaa0099/smartcity-iot-simulator:latest
           imagePullPolicy: IfNotPresent
           command: ["python"]
           args: ["simulator.py"]
@@ -99,4 +101,3 @@ spec:
                 configMapKeyRef:
                   name: smartcity-config
                   key: MQTT_PORT
-
