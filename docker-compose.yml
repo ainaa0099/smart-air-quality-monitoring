@@ -63,7 +63,25 @@ services:
     networks:
       - smartcity-net
 
-  # 4. OAuth / Auth Service (Node.js)
+  # 4. Node-RED IoT Bridge
+  # Subscribe data sensor dari MQTT lalu teruskan ke API Gateway.
+  node-red:
+    image: nodered/node-red:latest
+    container_name: smartcity-node-red
+    restart: unless-stopped
+    ports:
+      - "1880:1880"
+    volumes:
+      - ./iot/node-red-data:/data
+    depends_on:
+      mosquitto:
+        condition: service_started
+      gateway:
+        condition: service_started
+    networks:
+      - smartcity-net
+
+  # 5. OAuth / Auth Service (Node.js)
   # Menyediakan endpoint login, register, token, introspect, dan revoke.
   auth-service:
     build:
@@ -98,7 +116,7 @@ services:
     networks:
       - smartcity-net
 
-  # 5. API Gateway (Node.js)
+  # 6. API Gateway (Node.js)
   # Pintu masuk utama untuk Postman dan client aplikasi.
   gateway:
     build:
@@ -129,7 +147,7 @@ services:
     networks:
       - smartcity-net
 
-  # 6. Citizen Service (PHP 8.2)
+  # 7. Citizen Service (PHP 8.2)
   # Service ini ada di folder php-citizen pada branch main.
   # Endpoint utama berjalan di port 8000 dan memakai MySQL + RabbitMQ.
   citizen-service:
@@ -159,7 +177,7 @@ services:
     networks:
       - smartcity-net
 
-  # 7. Air Quality Service (PHP 8.2)
+  # 8. Air Quality Service (PHP 8.2)
   airquality-service:
     build:
       context: ./air-quality-service
@@ -190,7 +208,7 @@ services:
     networks:
       - smartcity-net
 
-  # 8. Environment Service (PHP 8.2)
+  # 9. Environment Service (PHP 8.2)
   environment-service:
     build:
       context: ./environment-service
@@ -221,7 +239,7 @@ services:
     networks:
       - smartcity-net
 
-  # 9. Machine Learning Service (FastAPI)
+  # 10. Machine Learning Service (FastAPI)
   # Service ini ada di folder ml-service pada branch main.
   # Command menjalankan training model dulu agar app.py menemukan
   # models/smartcity_models.pkl saat FastAPI start.
@@ -250,12 +268,12 @@ services:
     networks:
       - smartcity-net
 
-  # 10. IoT Simulator (opsional)
-  # Menggunakan kode simulator.py dari ml-service.
+  # 11. IoT Simulator (opsional)
+  # Menggunakan kode simulator.py dari folder iot.
   # Tidak otomatis jalan; aktifkan dengan profile simulator.
   iot-simulator:
     build:
-      context: ./ml-service
+      context: ./iot
       dockerfile: Dockerfile
     container_name: smartcity-iot-simulator
     restart: unless-stopped

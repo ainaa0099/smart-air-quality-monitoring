@@ -488,14 +488,10 @@ app.use(
 );
 app.use(
   "/iot/airquality",
-  protectedMiddleware,
-  adminOnly,
   createServiceProxy(process.env.AIRQUALITY_SERVICE_URL),
 );
 app.use(
   "/iot/weather",
-  protectedMiddleware,
-  adminOnly,
   createServiceProxy(process.env.ENVIRONMENT_SERVICE_URL),
 );
 

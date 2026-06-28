@@ -18,9 +18,10 @@ class Weather
                 temperature,
                 humidity,
                 wind_speed,
-                wind_direction
+                wind_direction,
+                recorded_at
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
         ");
 
         return $stmt->execute([
@@ -28,7 +29,8 @@ class Weather
             $data['temperature'],
             $data['humidity'],
             $data['wind_speed'],
-            $data['wind_direction']
+            $data['wind_direction'],
+            isset($data['recorded_at']) ? date('Y-m-d H:i:s', strtotime((string) $data['recorded_at'])) : date('Y-m-d H:i:s')
         ]);
     }
 
