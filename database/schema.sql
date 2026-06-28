@@ -6,6 +6,26 @@
 CREATE DATABASE IF NOT EXISTS smartcity;
 USE smartcity;
 
+-- Re-run friendly reset for local development/testing.
+-- This keeps imports deterministic when an older partial schema already exists.
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS login_logs;
+DROP TABLE IF EXISTS oauth_authorization_codes;
+DROP TABLE IF EXISTS oauth_tokens;
+DROP TABLE IF EXISTS social_accounts;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS oauth_clients;
+DROP TABLE IF EXISTS env_zone_status;
+DROP TABLE IF EXISTS env_alerts;
+DROP TABLE IF EXISTS env_weather;
+DROP TABLE IF EXISTS air_readings;
+DROP TABLE IF EXISTS air_stations;
+DROP TABLE IF EXISTS citizen_notifications;
+DROP TABLE IF EXISTS citizen_reports;
+DROP TABLE IF EXISTS citizen_citizens;
+DROP TABLE IF EXISTS zones;
+SET FOREIGN_KEY_CHECKS = 1;
+
 -- ============================================================
 -- SHARED TABLES
 -- ============================================================
@@ -226,6 +246,8 @@ CREATE TABLE env_alerts (
 CREATE TABLE env_zone_status (
     id INT AUTO_INCREMENT PRIMARY KEY,
     zone_id INT NOT NULL UNIQUE,
+    alert_type VARCHAR(50) NOT NULL DEFAULT 'status_update',
+    severity VARCHAR(20) NOT NULL DEFAULT 'Normal',
     notification TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (zone_id) REFERENCES zones(id)
