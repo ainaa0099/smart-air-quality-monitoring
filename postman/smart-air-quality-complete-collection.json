@@ -1,0 +1,382 @@
+{
+  "info": {
+    "name": "Smart Air Quality Monitoring - Complete API",
+    "description": "Complete Postman collection generated from local routes. Use gateway endpoints with Bearer token where protected.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Gateway",
+      "item": [
+        { "name": "Health", "request": { "method": "GET", "url": "{{gateway_url}}/health" } },
+        { "name": "Metrics", "request": { "method": "GET", "url": "{{gateway_url}}/api/metrics" } }
+      ]
+    },
+    {
+      "name": "OAuth and Auth",
+      "item": [
+        {
+          "name": "Register Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.user?.id) pm.collectionVariables.set('admin_id', String(json.data.user.id));",
+                  "if (json.data?.access_token) pm.collectionVariables.set('admin_token', json.data.access_token);",
+                  "if (json.data?.access_token) pm.collectionVariables.set('access_token', json.data.access_token);",
+                  "if (json.data?.refresh_token) pm.collectionVariables.set('admin_refresh_token', json.data.refresh_token);",
+                  "if (json.data?.refresh_token) pm.collectionVariables.set('refresh_token', json.data.refresh_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dian Puspita Sari\",\n  \"email\": \"dian.puspita.admin@example.com\",\n  \"password\": \"Rahasia123\",\n  \"nik\": \"3171000000009001\",\n  \"phone\": \"081238451901\",\n  \"zone_id\": 2,\n  \"role\": \"admin\"\n}"
+            },
+            "url": "{{auth_url}}/register"
+          }
+        },
+        {
+          "name": "Login Admin - OAuth Password Grant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.access_token) pm.collectionVariables.set('admin_token', json.data.access_token);",
+                  "if (json.data?.access_token) pm.collectionVariables.set('access_token', json.data.access_token);",
+                  "if (json.data?.refresh_token) pm.collectionVariables.set('admin_refresh_token', json.data.refresh_token);",
+                  "if (json.data?.refresh_token) pm.collectionVariables.set('refresh_token', json.data.refresh_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"grant_type\": \"password\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\",\n  \"username\": \"dian.puspita.admin@example.com\",\n  \"password\": \"Rahasia123\"\n}"
+            },
+            "url": "{{gateway_url}}/oauth/token"
+          }
+        },
+        {
+          "name": "Login Citizen - OAuth Password Grant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.access_token) pm.collectionVariables.set('citizen_token', json.data.access_token);",
+                  "if (json.data?.access_token) pm.collectionVariables.set('access_token', json.data.access_token);",
+                  "if (json.data?.refresh_token) pm.collectionVariables.set('citizen_refresh_token', json.data.refresh_token);",
+                  "if (json.data?.refresh_token) pm.collectionVariables.set('refresh_token', json.data.refresh_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"grant_type\": \"password\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\",\n  \"username\": \"rizky.maulana.citizen@example.com\",\n  \"password\": \"Rahasia123\"\n}"
+            },
+            "url": "{{gateway_url}}/oauth/token"
+          }
+        },
+        {
+          "name": "OAuth Token - Client Credentials",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"grant_type\": \"client_credentials\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\"\n}"
+            },
+            "url": "{{gateway_url}}/oauth/token"
+          }
+        },
+        {
+          "name": "OAuth Token - Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"grant_type\": \"refresh_token\",\n  \"client_id\": \"test-client\",\n  \"client_secret\": \"test-secret\",\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": "{{gateway_url}}/oauth/token"
+          }
+        },
+        {
+          "name": "OAuth Introspect",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-gateway-secret", "value": "smartcity_internal_secret" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"{{access_token}}\"\n}" },
+            "url": "{{gateway_url}}/oauth/introspect"
+          }
+        },
+        {
+          "name": "OAuth Revoke",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"{{access_token}}\",\n  \"token_type_hint\": \"access_token\"\n}" },
+            "url": "{{gateway_url}}/oauth/revoke"
+          }
+        },
+        {
+          "name": "Login Citizen - Simple Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.access_token) pm.collectionVariables.set('citizen_token', json.data.access_token);",
+                  "if (json.data?.access_token) pm.collectionVariables.set('access_token', json.data.access_token);",
+                  "if (json.data?.refresh_token) pm.collectionVariables.set('citizen_refresh_token', json.data.refresh_token);",
+                  "if (json.data?.refresh_token) pm.collectionVariables.set('refresh_token', json.data.refresh_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"rizky.maulana.citizen@example.com\",\n  \"password\": \"Rahasia123\"\n}" },
+            "url": "{{gateway_url}}/api/auth/login"
+          }
+        },
+        { "name": "Google OAuth Redirect", "request": { "method": "GET", "url": "{{gateway_url}}/api/auth/google?json=true" } },
+        { "name": "GitHub OAuth Redirect", "request": { "method": "GET", "url": "{{gateway_url}}/api/auth/github?json=true" } },
+        { "name": "Facebook OAuth Redirect", "request": { "method": "GET", "url": "{{gateway_url}}/api/auth/facebook?json=true" } }
+      ]
+    },
+    {
+      "name": "Citizens",
+      "item": [
+        { "name": "Citizen Service Health", "request": { "method": "GET", "url": "{{citizen_url}}/health" } },
+        { "name": "Get Citizen By ID", "request": { "method": "GET", "url": "{{gateway_url}}/api/citizens/{{citizen_id}}" } },
+        {
+          "name": "Register Citizen",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.id) pm.collectionVariables.set('citizen_id', String(json.data.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"nik\": \"3171000000009002\",\n  \"name\": \"Rizky Maulana Pratama\",\n  \"email\": \"rizky.maulana.citizen@example.com\",\n  \"password\": \"Rahasia123\",\n  \"phone\": \"081275921902\",\n  \"zone_id\": 3,\n  \"role\": \"citizen\"\n}" },
+            "url": "{{citizen_url}}/api/citizens"
+          }
+        },
+        {
+          "name": "Update Citizen",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Rizky Maulana Pratama\",\n  \"phone\": \"081275921847\",\n  \"zone_id\": 4\n}" },
+            "url": "{{gateway_url}}/api/citizens/{{citizen_id}}"
+          }
+        },
+        { "name": "Delete Citizen", "request": { "method": "DELETE", "url": "{{gateway_url}}/api/citizens/{{citizen_id}}" } }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        { "name": "List Reports", "request": { "method": "GET", "url": "{{gateway_url}}/api/reports?status=pending&zone_id=1&citizen_id={{citizen_id}}" } },
+        { "name": "Get Report By ID", "request": { "method": "GET", "url": "{{gateway_url}}/api/reports/1" } },
+        {
+          "name": "Create Report",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"citizen_id\": \"{{citizen_id}}\",\n  \"category\": \"vehicle_emission\",\n  \"description\": \"Asap kendaraan di sekitar Jalan Sudirman terasa pekat sejak jam berangkat kerja.\",\n  \"zone_id\": 1\n}" },
+            "url": "{{gateway_url}}/api/reports"
+          }
+        },
+        {
+          "name": "Update Report Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"in_progress\"\n}" },
+            "url": "{{gateway_url}}/api/reports/1/status"
+          }
+        },
+        { "name": "Delete Report", "request": { "method": "DELETE", "url": "{{gateway_url}}/api/reports/1" } }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        { "name": "List Notifications", "request": { "method": "GET", "url": "{{gateway_url}}/api/notifications?citizen_id={{citizen_id}}&unread=true" } },
+        { "name": "Get Notification By ID", "request": { "method": "GET", "url": "{{gateway_url}}/api/notifications/1" } },
+        {
+          "name": "Create Notification",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"citizen_id\": \"{{citizen_id}}\",\n  \"title\": \"Kualitas Udara Menurun\",\n  \"body\": \"Pemantauan sore ini menunjukkan kadar PM2.5 meningkat. Warga disarankan memakai masker saat keluar rumah.\"\n}" },
+            "url": "{{gateway_url}}/api/notifications"
+          }
+        },
+        { "name": "Mark Notification As Read", "request": { "method": "PATCH", "url": "{{gateway_url}}/api/notifications/1/read" } },
+        {
+          "name": "Mark All Notifications As Read",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"citizen_id\": \"{{citizen_id}}\"\n}" },
+            "url": "{{gateway_url}}/api/notifications/read-all"
+          }
+        },
+        { "name": "Delete Notification", "request": { "method": "DELETE", "url": "{{gateway_url}}/api/notifications/1" } }
+      ]
+    },
+    {
+      "name": "Air Quality",
+      "item": [
+        { "name": "Air Quality Health", "request": { "method": "GET", "url": "{{airquality_url}}/health" } },
+        { "name": "Current All Zones", "request": { "method": "GET", "url": "{{gateway_url}}/api/airquality/current" } },
+        { "name": "Current By Zone", "request": { "method": "GET", "url": "{{gateway_url}}/api/airquality/current?zone_id=1" } },
+        { "name": "History", "request": { "method": "GET", "url": "{{gateway_url}}/api/airquality/history?zone_id=1&from=2026-06-01&to=2026-06-30&page=1&limit=20" } },
+        { "name": "Stations", "request": { "method": "GET", "url": "{{gateway_url}}/api/airquality/stations?zone_id=1" } },
+        {
+          "name": "Create Reading",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"station_id\": 102,\n  \"zone_id\": 2,\n  \"pm25\": 54.8,\n  \"pm10\": 72.3,\n  \"no2\": 24.6,\n  \"co\": 0.82,\n  \"o3\": 41.7,\n  \"recorded_at\": \"2026-06-29 07:30:00\"\n}" },
+            "url": "{{gateway_url}}/api/airquality/readings"
+          }
+        },
+        {
+          "name": "IoT Air Quality",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"station_id\": 104,\n  \"zone_id\": 4,\n  \"pm25\": 68.5,\n  \"pm10\": 88.2,\n  \"no2\": 31.4,\n  \"co\": 0.95,\n  \"o3\": 36.8\n}" },
+            "url": "{{gateway_url}}/iot/airquality"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Environment",
+      "item": [
+        { "name": "Environment Health", "request": { "method": "GET", "url": "{{environment_url}}/health" } },
+        { "name": "Current Weather", "request": { "method": "GET", "url": "{{gateway_url}}/api/environment/current" } },
+        { "name": "Alerts", "request": { "method": "GET", "url": "{{gateway_url}}/api/environment/alerts" } },
+        { "name": "Zones", "request": { "method": "GET", "url": "{{gateway_url}}/api/environment/zones" } },
+        { "name": "Zone Detail", "request": { "method": "GET", "url": "{{gateway_url}}/api/environment/zones/1" } },
+        { "name": "Notification Status", "request": { "method": "GET", "url": "{{gateway_url}}/api/environment/notification" } },
+        {
+          "name": "Create Weather",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"zone_id\": 2,\n  \"temperature\": 32.4,\n  \"humidity\": 76.8,\n  \"wind_speed\": 2.1,\n  \"wind_direction\": 145\n}" },
+            "url": "{{gateway_url}}/api/environment/weather"
+          }
+        },
+        {
+          "name": "IoT Weather",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"zone_id\": 4,\n  \"temperature\": 33.1,\n  \"humidity\": 74.2,\n  \"wind_speed\": 1.6,\n  \"wind_direction\": 210\n}" },
+            "url": "{{gateway_url}}/iot/weather"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ML Service",
+      "item": [
+        { "name": "ML Health", "request": { "method": "GET", "url": "{{ml_url}}/health" } },
+        {
+          "name": "Predict AQI",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"pm25\": 54.8,\n  \"pm10\": 72.3,\n  \"no2\": 24.6,\n  \"co\": 0.82,\n  \"o3\": 41.7,\n  \"temperature\": 32.4,\n  \"humidity\": 76.8\n}" },
+            "url": "{{gateway_url}}/predict/aqi"
+          }
+        },
+        {
+          "name": "Predict Pollution",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"hour\": 7,\n  \"day\": 29,\n  \"wind_speed\": 2.1,\n  \"wind_direction\": 145,\n  \"temperature\": 32.4,\n  \"humidity\": 76.8,\n  \"pm25_prev\": 54.8\n}" },
+            "url": "{{gateway_url}}/predict/pollution"
+          }
+        },
+        {
+          "name": "Detect Anomaly",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"sensor_value\": 142.6,\n  \"hour\": 17,\n  \"rolling_mean_1h\": 91.3,\n  \"z_score\": 3.4\n}" },
+            "url": "{{gateway_url}}/detect/anomaly"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "gateway_url", "value": "http://localhost:3000" },
+    { "key": "auth_url", "value": "http://localhost:3002" },
+    { "key": "citizen_url", "value": "http://localhost:8000" },
+    { "key": "airquality_url", "value": "http://localhost:8001" },
+    { "key": "environment_url", "value": "http://localhost:8002" },
+    { "key": "ml_url", "value": "http://localhost:5000" },
+    { "key": "access_token", "value": "" },
+    { "key": "refresh_token", "value": "" },
+    { "key": "admin_id", "value": "" },
+    { "key": "admin_token", "value": "" },
+    { "key": "admin_refresh_token", "value": "" },
+    { "key": "citizen_id", "value": "" },
+    { "key": "citizen_token", "value": "" },
+    { "key": "citizen_refresh_token", "value": "" }
+  ]
+}
