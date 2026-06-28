@@ -17,9 +17,8 @@ final class ReadingController
         // Beberapa flow IoT membungkus payload sensor di dalam key "data".
         $input = isset($input['data']) && is_array($input['data']) ? $input['data'] : $input;
 
-        // Simulator anggota ML memakai station_id 101-105; database service ini memakai 1-5.
-        if (isset($input['station_id']) && (int) $input['station_id'] >= 101 && (int) $input['station_id'] <= 105) {
-            $input['station_id'] = (int) $input['station_id'] - 100;
+        // Simulator anggota ML
+        if (isset($input['station_id'])) { $input['station_id'] = (int) $input['station_id'];
         }
 
         $errors = ReadingValidator::validate($input);
