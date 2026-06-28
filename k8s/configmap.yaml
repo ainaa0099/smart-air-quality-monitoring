@@ -1,0 +1,874 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smartcity-config
+  namespace: smartcity
+data:
+  NODE_ENV: "production"
+  APP_ENV: "production"
+  APP_NAME: "smart-air-quality-monitoring"
+  CORS_ORIGIN: "*"
+
+  DB_HOST: "mysql"
+  DB_PORT: "3306"
+  DB_NAME: "smartcity"
+  AUTH_DB_NAME: "smartcity"
+
+  JWT_ACCESS_EXPIRES: "15m"
+  JWT_REFRESH_EXPIRES: "7d"
+
+  RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_EXCHANGE: "city.events"
+  RABBITMQ_VHOST: "/"
+
+  MQTT_HOST: "mosquitto"
+  MQTT_PORT: "1883"
+
+  AUTH_SERVICE_URL: "http://oauth-server:3002"
+  OAUTH_SERVER_URL: "http://oauth-server:3002"
+  CITIZEN_SERVICE_URL: "http://citizen-service:8000"
+  AIRQUALITY_SERVICE_URL: "http://airquality-service:8001"
+  ENVIRONMENT_SERVICE_URL: "http://environment-service:8002"
+  PYTHON_ML_SERVICE_URL: "http://python-ml-service:5000"
+
+  PORT_GATEWAY: "3000"
+  PORT_AUTH: "3002"
+  PORT_CITIZEN: "8000"
+  PORT_AIRQUALITY: "8001"
+  PORT_ENVIRONMENT: "8002"
+  SERVICE_PORT: "8002"
+  PORT_ML: "5000"
+
+  GITHUB_CALLBACK_URL: "http://smartcity.local/api/auth/callback/github"
+  GOOGLE_CALLBACK_URL: "http://smartcity.local/api/auth/callback/google"
+  FACEBOOK_CALLBACK_URL: "http://smartcity.local/api/auth/callback/facebook"
+  FRONTEND_SUCCESS_URL: "http://smartcity.local/auth/success"
+  FRONTEND_ERROR_URL: "http://smartcity.local/auth/error"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-initdb
+  namespace: smartcity
+data:
+  00-schema.sql: |
+    -- ============================================================
+    -- Smart Air Quality Monitoring Platform
+    -- Unified Database Schema
+    -- ============================================================
+
+    CREATE DATABASE IF NOT EXISTS smartcity;
+    USE smartcity;
+
+    -- ============================================================
+    -- SHARED TABLES
+    -- ============================================================
+
+    CREATE TABLE zones (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        city_district VARCHAR(100) NOT NULL,
+        coordinates VARCHAR(100),
+        area_km2 DECIMAL(10,2),
+        UNIQUE KEY uq_zones_name (name)
+    );
+
+    -- ============================================================
+    -- CITIZEN SERVICE (also used for authentication)
+    -- ============================================================
+
+    CREATE TABLE citizen_citizens (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nik VARCHAR(16) NOT NULL UNIQUE,
+        name VARCHAR(100) NOT NULL,
+        email VARCHAR(100) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        phone VARCHAR(20) NOT NULL,
+        zone_id INT NOT NULL,
+        role VARCHAR(20) DEFAULT 'citizen',
+        is_active BOOLEAN DEFAULT TRUE,
+        oauth_provider VARCHAR(20) DEFAULT 'local',
+        avatar_url VARCHAR(255) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (zone_id) REFERENCES zones(id)
+    );
+
+    CREATE TABLE citizen_reports (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        citizen_id INT NOT NULL,
+        category VARCHAR(50) NOT NULL,
+        description TEXT NOT NULL,
+        zone_id INT NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (citizen_id) REFERENCES citizen_citizens(id),
+        FOREIGN KEY (zone_id) REFERENCES zones(id)
+    );
+
+    CREATE TABLE citizen_notifications (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        citizen_id INT NOT NULL,
+        title VARCHAR(100) NOT NULL,
+        body TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (citizen_id) REFERENCES citizen_citizens(id)
+    );
+
+    -- ============================================================
+    -- AUTH TABLES
+    -- Originally defined in services/auth/db_auth.sql as a
+    -- separate database. Merged into smartcity; user_id columns
+    -- now reference citizen_citizens(id) instead of a separate
+    -- users table, since registration and login are unified.
+    -- ============================================================
+
+    CREATE TABLE refresh_tokens (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        token VARCHAR(500) NOT NULL,
+        is_revoked BOOLEAN DEFAULT FALSE,
+        expires_at DATETIME NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES citizen_citizens(id) ON DELETE CASCADE,
+        INDEX idx_user_id (user_id),
+        INDEX idx_expires_at (expires_at)
+    );
+
+    CREATE TABLE social_accounts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        provider VARCHAR(50) NOT NULL,
+        provider_user_id VARCHAR(255) NOT NULL,
+        provider_email VARCHAR(255),
+        avatar_url VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES citizen_citizens(id) ON DELETE CASCADE,
+        UNIQUE KEY uk_provider_user (provider, provider_user_id),
+        INDEX idx_user_id (user_id)
+    );
+
+    CREATE TABLE oauth_clients (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_id VARCHAR(255) UNIQUE NOT NULL,
+        client_secret VARCHAR(255) NOT NULL,
+        client_name VARCHAR(255) NOT NULL,
+        redirect_uris JSON,
+        grant_types JSON,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_client_id (client_id)
+    );
+
+    CREATE TABLE oauth_tokens (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        token_id VARCHAR(255) UNIQUE NOT NULL,
+        client_id VARCHAR(255) NOT NULL,
+        user_id INT,
+        access_token VARCHAR(500) NOT NULL,
+        token_type VARCHAR(50) DEFAULT 'Bearer',
+        expires_at DATETIME NOT NULL,
+        scope VARCHAR(255),
+        is_revoked BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES citizen_citizens(id) ON DELETE SET NULL,
+        INDEX idx_client_id (client_id),
+        INDEX idx_user_id (user_id),
+        INDEX idx_expires_at (expires_at)
+    );
+
+    CREATE TABLE oauth_authorization_codes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        code_id VARCHAR(255) UNIQUE NOT NULL,
+        client_id VARCHAR(255) NOT NULL,
+        user_id INT NOT NULL,
+        redirect_uri VARCHAR(255) NOT NULL,
+        scope VARCHAR(255),
+        is_used BOOLEAN DEFAULT FALSE,
+        expires_at DATETIME NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES citizen_citizens(id) ON DELETE CASCADE,
+        INDEX idx_client_id (client_id),
+        INDEX idx_expires_at (expires_at)
+    );
+
+    CREATE TABLE login_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        login_method VARCHAR(50) NOT NULL,
+        provider VARCHAR(50) DEFAULT NULL,
+        ip_address VARCHAR(45) NOT NULL,
+        city VARCHAR(100),
+        region VARCHAR(100),
+        country VARCHAR(100),
+        loc VARCHAR(100),
+        timezone VARCHAR(100),
+        org VARCHAR(255),
+        user_agent TEXT,
+        login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES citizen_citizens(id) ON DELETE CASCADE,
+        INDEX idx_user_id (user_id),
+        INDEX idx_login_at (login_at)
+    );
+
+    -- ============================================================
+    -- AIR QUALITY SERVICE
+    -- ============================================================
+
+    CREATE TABLE air_stations (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        zone_id INT NOT NULL,
+        station_name VARCHAR(120) NOT NULL,
+        station_code VARCHAR(40) NOT NULL,
+        latitude DECIMAL(10,7),
+        longitude DECIMAL(10,7),
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_air_station_code (station_code),
+        FOREIGN KEY (zone_id) REFERENCES zones(id)
+    );
+
+    CREATE TABLE air_readings (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        station_id BIGINT UNSIGNED NULL,
+        zone_id INT NOT NULL,
+        pm25 DECIMAL(10,2) NOT NULL,
+        pm10 DECIMAL(10,2) NOT NULL,
+        no2 DECIMAL(10,2) NOT NULL,
+        co DECIMAL(10,2) NOT NULL,
+        o3 DECIMAL(10,2) NOT NULL,
+        aqi_value SMALLINT UNSIGNED,
+        aqi_category VARCHAR(30),
+        dominant_pollutant VARCHAR(10),
+        recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (zone_id) REFERENCES zones(id),
+        FOREIGN KEY (station_id) REFERENCES air_stations(id)
+    );
+
+    -- ============================================================
+    -- ENVIRONMENT SERVICE
+    -- ============================================================
+
+    CREATE TABLE env_weather (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        zone_id INT NOT NULL,
+        temperature DECIMAL(5,2) NOT NULL,
+        humidity DECIMAL(5,2) NOT NULL,
+        wind_speed DECIMAL(5,2) NOT NULL,
+        wind_direction DECIMAL(5,2) NOT NULL,
+        recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (zone_id) REFERENCES zones(id)
+    );
+
+    CREATE TABLE env_alerts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        zone_id INT NOT NULL,
+        event VARCHAR(50) DEFAULT 'anomaly.alert',
+        alert_type VARCHAR(50) NOT NULL,
+        pollutant VARCHAR(20),
+        anomaly_score DECIMAL(6,4),
+        severity VARCHAR(20) NOT NULL,
+        value DECIMAL(6,2),
+        threshold DECIMAL(6,2),
+        resolved_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (zone_id) REFERENCES zones(id)
+    );
+
+    CREATE TABLE env_zone_status (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        zone_id INT NOT NULL UNIQUE,
+        alert_type VARCHAR(50) NOT NULL DEFAULT 'status_update',
+        severity VARCHAR(20) NOT NULL DEFAULT 'Normal',
+        notification TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (zone_id) REFERENCES zones(id)
+    );
+
+    -- ============================================================
+    -- ADDITIONAL INDEXES
+    -- ============================================================
+
+    CREATE INDEX idx_air_zone_recorded ON air_readings(zone_id, recorded_at);
+    CREATE INDEX idx_air_station_recorded ON air_readings(station_id, recorded_at);
+    CREATE INDEX idx_env_zone_recorded ON env_weather(zone_id, recorded_at);
+    CREATE INDEX idx_reports_status ON citizen_reports(status);
+    CREATE INDEX idx_reports_zone ON citizen_reports(zone_id);
+
+    -- ============================================================
+    -- DEFAULT ZONES
+    -- ============================================================
+
+    INSERT INTO zones (name, city_district, coordinates, area_km2) VALUES
+    ('Zone 1', 'Jakarta Pusat', '-6.1862,106.8284', 48.13),
+    ('Zone 2', 'Jakarta Utara', '-6.1384,106.8636', 146.66),
+    ('Zone 3', 'Jakarta Selatan', '-6.2615,106.8106', 141.27),
+    ('Zone 4', 'Jakarta Timur', '-6.2250,106.9004', 188.03),
+    ('Zone 5', 'Jakarta Barat', '-6.1352,106.7621', 129.54);
+
+    -- ============================================================
+    -- DEFAULT AIR QUALITY STATIONS
+    -- One station per zone, matching the station_id convention
+    -- (101-105) used by the ML simulator (Anggota 5).
+    -- ============================================================
+
+    INSERT INTO air_stations (id, zone_id, station_name, station_code, latitude, longitude) VALUES
+    (101, 1, 'Stasiun Pemantau Jakarta Pusat', 'AQ-ZONE1-101', -6.1862, 106.8284),
+    (102, 2, 'Stasiun Pemantau Jakarta Utara', 'AQ-ZONE2-102', -6.1384, 106.8636),
+    (103, 3, 'Stasiun Pemantau Jakarta Selatan', 'AQ-ZONE3-103', -6.2615, 106.8106),
+    (104, 4, 'Stasiun Pemantau Jakarta Timur', 'AQ-ZONE4-104', -6.2250, 106.9004),
+    (105, 5, 'Stasiun Pemantau Jakarta Barat', 'AQ-ZONE5-105', -6.1352, 106.7621);
+
+    -- ============================================================
+    -- DEFAULT OAUTH TEST CLIENT
+    -- ============================================================
+
+    INSERT IGNORE INTO oauth_clients (client_id, client_secret, client_name, grant_types) VALUES
+    ('test-client', 'test-secret', 'Test Client', '["client_credentials", "password", "refresh_token"]');
+  01-seed.sql: |
+    -- ============================================================
+    -- Smart Air Quality Monitoring Platform
+    -- Seed Data (auto-generated by generate_seed.py)
+    -- Statistical patterns kept in sync with
+    -- ml-service/generate_dataset.py (30-min interval, gaussian
+    -- distributions, weather -> pollution correlation formula)
+    -- ============================================================
+
+    USE smartcity;
+
+    -- Citizens (50 rows)
+    INSERT INTO citizen_citizens (nik, name, email, password, phone, zone_id, role) VALUES
+    ('3171000000000001', 'Oki Kusuma', 'oki.kusuma1@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081217749299', 5, 'admin'),
+    ('3171000000000002', 'Oki Nugroho', 'oki.nugroho2@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081251361818', 1, 'citizen'),
+    ('3171000000000003', 'Maya Hidayat', 'maya.hidayat3@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081210404729', 2, 'citizen'),
+    ('3171000000000004', 'Taufik Santoso', 'taufik.santoso4@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081216078694', 4, 'citizen'),
+    ('3171000000000005', 'Lukman Hartono', 'lukman.hartono5@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081218557710', 5, 'citizen'),
+    ('3171000000000006', 'Budi Gunawan', 'budi.gunawan6@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081219263592', 4, 'citizen'),
+    ('3171000000000007', 'Budi Hidayat', 'budi.hidayat7@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081264877191', 2, 'citizen'),
+    ('3171000000000008', 'Ayu Pratama', 'ayu.pratama8@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081296104027', 4, 'citizen'),
+    ('3171000000000009', 'Lukman Gunawan', 'lukman.gunawan9@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081261335545', 4, 'citizen'),
+    ('3171000000000010', 'Maya Wibowo', 'maya.wibowo10@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081220770971', 5, 'citizen'),
+    ('3171000000000011', 'Eka Nugroho', 'eka.nugroho11@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081256676884', 1, 'citizen'),
+    ('3171000000000012', 'Fajar Permata', 'fajar.permata12@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081262755436', 5, 'citizen'),
+    ('3171000000000013', 'Eka Hartono', 'eka.hartono13@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081239888974', 1, 'citizen'),
+    ('3171000000000014', 'Ayu Wijaya', 'ayu.wijaya14@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081250045602', 4, 'citizen'),
+    ('3171000000000015', 'Wati Hartono', 'wati.hartono15@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081283074216', 4, 'citizen'),
+    ('3171000000000016', 'Sari Wibowo', 'sari.wibowo16@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081240824989', 2, 'citizen'),
+    ('3171000000000017', 'Oki Saputra', 'oki.saputra17@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081230820038', 3, 'citizen'),
+    ('3171000000000018', 'Gita Gunawan', 'gita.gunawan18@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081225145751', 1, 'citizen'),
+    ('3171000000000019', 'Wati Wibowo', 'wati.wibowo19@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081292533595', 1, 'citizen'),
+    ('3171000000000020', 'Hadi Lestari', 'hadi.lestari20@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081219031632', 1, 'citizen'),
+    ('3171000000000021', 'Umar Wijaya', 'umar.wijaya21@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081269920305', 5, 'citizen'),
+    ('3171000000000022', 'Budi Lestari', 'budi.lestari22@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081215937353', 4, 'citizen'),
+    ('3171000000000023', 'Oki Lestari', 'oki.lestari23@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081282445335', 2, 'citizen'),
+    ('3171000000000024', 'Ayu Halim', 'ayu.halim24@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081217575790', 2, 'citizen'),
+    ('3171000000000025', 'Rendi Hidayat', 'rendi.hidayat25@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081241428626', 5, 'citizen'),
+    ('3171000000000026', 'Kartika Kusuma', 'kartika.kusuma26@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081290251151', 3, 'citizen'),
+    ('3171000000000027', 'Hadi Hidayat', 'hadi.hidayat27@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081229228089', 5, 'citizen'),
+    ('3171000000000028', 'Hadi Wibowo', 'hadi.wibowo28@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081250332555', 3, 'citizen'),
+    ('3171000000000029', 'Budi Permata', 'budi.permata29@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081289412216', 2, 'citizen'),
+    ('3171000000000030', 'Vina Nugroho', 'vina.nugroho30@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081267337891', 5, 'citizen'),
+    ('3171000000000031', 'Putri Wijaya', 'putri.wijaya31@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081256226575', 4, 'citizen'),
+    ('3171000000000032', 'Rendi Saputra', 'rendi.saputra32@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081265878146', 4, 'citizen'),
+    ('3171000000000033', 'Eka Hidayat', 'eka.hidayat33@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081260527631', 2, 'citizen'),
+    ('3171000000000034', 'Ayu Permata', 'ayu.permata34@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081273554620', 2, 'citizen'),
+    ('3171000000000035', 'Yoga Pratama', 'yoga.pratama35@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081272146184', 1, 'citizen'),
+    ('3171000000000036', 'Nanda Permata', 'nanda.permata36@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081281134297', 2, 'citizen'),
+    ('3171000000000037', 'Maya Lestari', 'maya.lestari37@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081244224936', 2, 'citizen'),
+    ('3171000000000038', 'Kartika Nugroho', 'kartika.nugroho38@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081220612653', 4, 'citizen'),
+    ('3171000000000039', 'Lukman Santoso', 'lukman.santoso39@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081281891784', 2, 'citizen'),
+    ('3171000000000040', 'Maya Nugroho', 'maya.nugroho40@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081291197624', 5, 'citizen'),
+    ('3171000000000041', 'Budi Halim', 'budi.halim41@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081219768947', 2, 'citizen'),
+    ('3171000000000042', 'Ayu Kusuma', 'ayu.kusuma42@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081285007641', 2, 'citizen'),
+    ('3171000000000043', 'Putri Lestari', 'putri.lestari43@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081254689713', 3, 'citizen'),
+    ('3171000000000044', 'Andi Lestari', 'andi.lestari44@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081235504548', 1, 'citizen'),
+    ('3171000000000045', 'Zaki Susanto', 'zaki.susanto45@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081274279671', 2, 'citizen'),
+    ('3171000000000046', 'Yoga Kusuma', 'yoga.kusuma46@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081237449289', 4, 'citizen'),
+    ('3171000000000047', 'Hadi Permata', 'hadi.permata47@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081253166435', 3, 'citizen'),
+    ('3171000000000048', 'Maya Setiawan', 'maya.setiawan48@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081281625307', 3, 'citizen'),
+    ('3171000000000049', 'Joko Hidayat', 'joko.hidayat49@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081258270683', 5, 'citizen'),
+    ('3171000000000050', 'Putri Setiawan', 'putri.setiawan50@example.com', '$2b$12$cpKkExyFqNWkbFxuK/sVMOjWaCLF0l3YXuuXow1WSKStnTd.Vn/lG', '081223234972', 4, 'citizen');
+
+    -- Air Quality Readings (200 rows)
+    INSERT INTO air_readings (station_id, zone_id, pm25, pm10, no2, co, o3, aqi_value, aqi_category, dominant_pollutant, recorded_at) VALUES
+    (101, 1, 47.86, 62.36, 23.88, 0.64, 37.87, 64, 'Moderate', 'PM10', '2026-06-01 00:00:00'),
+    (102, 2, 43.43, 53.24, 14.36, 0.62, 42.85, 51, 'Moderate', 'PM10', '2026-06-01 00:30:00'),
+    (103, 3, 41.39, 55.01, 26.07, 0.79, 34.43, 67, 'Moderate', 'PM10', '2026-06-01 01:00:00'),
+    (104, 4, 52.49, 66.43, 21.21, 0.84, 28.73, 124, 'Unhealthy', 'PM10', '2026-06-01 01:30:00'),
+    (105, 5, 36.93, 41.51, 21.19, 0.74, 36.32, 74, 'Moderate', 'PM10', '2026-06-01 02:00:00'),
+    (101, 1, 47.43, 53.19, 15.88, 0.67, 32.33, 66, 'Moderate', 'PM10', '2026-06-01 02:30:00'),
+    (102, 2, 50.7, 66.18, 30.08, 0.53, 41.06, 121, 'Unhealthy', 'PM10', '2026-06-01 03:00:00'),
+    (103, 3, 24.87, 28.94, 18.55, 0.31, 40.54, 40, 'Good', 'O3', '2026-06-01 03:30:00'),
+    (104, 4, 53.54, 68.28, 26.48, 0.56, 46.08, 133, 'Unhealthy', 'PM10', '2026-06-01 04:00:00'),
+    (105, 5, 57.25, 74.66, 27.54, 0.67, 37.99, 139, 'Unhealthy', 'PM10', '2026-06-01 04:30:00'),
+    (101, 1, 50.36, 66.28, 21.84, 0.62, 39.93, 108, 'Unhealthy', 'PM10', '2026-06-01 05:00:00'),
+    (102, 2, 46.64, 64.9, 14.57, 0.82, 29.77, 57, 'Moderate', 'PM10', '2026-06-01 05:30:00'),
+    (103, 3, 26.29, 34.93, 11.68, 0.6, 40.43, 71, 'Moderate', 'O3', '2026-06-01 06:00:00'),
+    (104, 4, 61.66, 72.26, 21.0, 0.71, 53.12, 106, 'Unhealthy', 'PM10', '2026-06-01 06:30:00'),
+    (105, 5, 62.48, 71.13, 17.3, 0.88, 39.28, 128, 'Unhealthy', 'PM10', '2026-06-01 07:00:00'),
+    (101, 1, 49.67, 60.58, 16.52, 0.78, 33.72, 84, 'Moderate', 'PM10', '2026-06-01 07:30:00'),
+    (102, 2, 40.14, 51.24, 31.24, 0.71, 42.96, 53, 'Moderate', 'PM10', '2026-06-01 08:00:00'),
+    (103, 3, 37.6, 42.85, 18.69, 0.96, 35.19, 81, 'Moderate', 'PM10', '2026-06-01 08:30:00'),
+    (104, 4, 46.55, 56.15, 12.56, 0.95, 53.96, 92, 'Moderate', 'PM10', '2026-06-01 09:00:00'),
+    (105, 5, 54.45, 63.0, 20.25, 0.59, 44.0, 118, 'Unhealthy', 'PM10', '2026-06-01 09:30:00'),
+    (101, 1, 48.76, 55.07, 17.45, 0.48, 42.61, 99, 'Moderate', 'PM10', '2026-06-01 10:00:00'),
+    (102, 2, 43.61, 48.74, 28.09, 0.29, 60.26, 67, 'Moderate', 'O3', '2026-06-01 10:30:00'),
+    (103, 3, 63.45, 84.71, 19.43, 0.56, 44.34, 104, 'Unhealthy', 'PM10', '2026-06-01 11:00:00'),
+    (104, 4, 53.61, 67.06, 24.54, 0.76, 36.16, 133, 'Unhealthy', 'PM10', '2026-06-01 11:30:00'),
+    (105, 5, 30.23, 34.34, 25.55, 0.61, 29.24, 77, 'Moderate', 'PM10', '2026-06-01 12:00:00'),
+    (101, 1, 30.01, 35.84, 29.15, 0.6, 44.71, 92, 'Moderate', 'O3', '2026-06-01 12:30:00'),
+    (102, 2, 37.88, 53.01, 24.85, 0.72, 41.72, 73, 'Moderate', 'PM10', '2026-06-01 13:00:00'),
+    (103, 3, 57.14, 74.91, 32.45, 0.3, 21.9, 142, 'Unhealthy', 'PM10', '2026-06-01 13:30:00'),
+    (104, 4, 16.21, 22.1, 17.97, 0.97, 38.44, 29, 'Good', 'O3', '2026-06-01 14:00:00'),
+    (105, 5, 24.26, 30.24, 16.59, 0.93, 28.76, 22, 'Good', 'PM10', '2026-06-01 14:30:00'),
+    (101, 1, 36.83, 51.34, 24.19, 0.82, 35.43, 58, 'Moderate', 'PM10', '2026-06-01 15:00:00'),
+    (102, 2, 22.68, 28.91, 19.69, 0.81, 43.15, 29, 'Good', 'O3', '2026-06-01 15:30:00'),
+    (103, 3, 39.7, 51.79, 19.27, 0.54, 19.72, 90, 'Moderate', 'PM10', '2026-06-01 16:00:00'),
+    (104, 4, 41.21, 47.52, 29.17, 0.49, 42.73, 72, 'Moderate', 'PM10', '2026-06-01 16:30:00'),
+    (105, 5, 18.93, 21.73, 19.44, 0.47, 51.35, 26, 'Good', 'O3', '2026-06-01 17:00:00'),
+    (101, 1, 42.81, 47.39, 17.94, 0.77, 48.84, 55, 'Moderate', 'O3', '2026-06-01 17:30:00'),
+    (102, 2, 32.87, 41.44, 25.21, 0.69, 47.16, 67, 'Moderate', 'O3', '2026-06-01 18:00:00'),
+    (103, 3, 49.07, 68.47, 16.97, 1.08, 54.32, 63, 'Moderate', 'PM10', '2026-06-01 18:30:00'),
+    (104, 4, 54.93, 72.28, 24.48, 0.55, 37.66, 143, 'Unhealthy', 'PM10', '2026-06-01 19:00:00'),
+    (105, 5, 62.37, 78.1, 31.91, 0.65, 32.78, 145, 'Unhealthy', 'PM10', '2026-06-01 19:30:00'),
+    (101, 1, 48.26, 66.16, 17.12, 0.53, 39.77, 69, 'Moderate', 'PM10', '2026-06-01 20:00:00'),
+    (102, 2, 43.52, 56.69, 29.66, 0.44, 38.95, 98, 'Moderate', 'PM10', '2026-06-01 20:30:00'),
+    (103, 3, 36.56, 49.19, 21.71, 0.38, 41.46, 52, 'Moderate', 'PM10', '2026-06-01 21:00:00'),
+    (104, 4, 57.83, 78.99, 18.69, 0.58, 33.55, 125, 'Unhealthy', 'PM10', '2026-06-01 21:30:00'),
+    (105, 5, 36.28, 48.29, 26.42, 0.8, 50.74, 84, 'Moderate', 'O3', '2026-06-01 22:00:00'),
+    (101, 1, 54.14, 67.1, 26.12, 0.54, 39.95, 121, 'Unhealthy', 'PM10', '2026-06-01 22:30:00'),
+    (102, 2, 32.28, 43.55, 10.72, 0.62, 41.75, 67, 'Moderate', 'PM10', '2026-06-01 23:00:00'),
+    (103, 3, 30.92, 36.23, 12.9, 0.29, 44.91, 66, 'Moderate', 'O3', '2026-06-01 23:30:00'),
+    (104, 4, 39.87, 52.16, 21.71, 0.64, 29.62, 77, 'Moderate', 'PM10', '2026-06-02 00:00:00'),
+    (105, 5, 56.65, 62.65, 10.22, 1.02, 31.96, 131, 'Unhealthy', 'PM10', '2026-06-02 00:30:00'),
+    (101, 1, 22.76, 27.9, 23.14, 0.51, 35.5, 27, 'Good', 'O3', '2026-06-02 01:00:00'),
+    (102, 2, 32.36, 42.63, 13.2, 0.97, 20.84, 90, 'Moderate', 'PM10', '2026-06-02 01:30:00'),
+    (103, 3, 14.81, 18.2, 21.44, 0.45, 37.51, 34, 'Good', 'O3', '2026-06-02 02:00:00'),
+    (104, 4, 48.97, 57.57, 12.41, 0.82, 42.05, 85, 'Moderate', 'PM10', '2026-06-02 02:30:00'),
+    (105, 5, 60.14, 66.88, 29.57, 0.89, 49.93, 116, 'Unhealthy', 'PM10', '2026-06-02 03:00:00'),
+    (101, 1, 46.38, 61.69, 31.65, 0.86, 50.89, 98, 'Moderate', 'PM10', '2026-06-02 03:30:00'),
+    (102, 2, 44.68, 61.6, 9.51, 0.46, 22.96, 63, 'Moderate', 'PM10', '2026-06-02 04:00:00'),
+    (103, 3, 73.37, 99.42, 31.53, 0.79, 38.88, 137, 'Unhealthy', 'PM10', '2026-06-02 04:30:00'),
+    (104, 4, 41.19, 49.53, 27.77, 0.36, 60.46, 91, 'Moderate', 'O3', '2026-06-02 05:00:00'),
+    (105, 5, 55.88, 72.37, 30.39, 0.46, 26.81, 150, 'Unhealthy', 'PM10', '2026-06-02 05:30:00'),
+    (101, 1, 26.59, 35.88, 31.8, 0.87, 39.55, 90, 'Moderate', 'O3', '2026-06-02 06:00:00'),
+    (102, 2, 36.16, 43.63, 28.67, 0.72, 49.41, 89, 'Moderate', 'O3', '2026-06-02 06:30:00'),
+    (103, 3, 48.52, 63.85, 13.25, 0.79, 34.71, 82, 'Moderate', 'PM10', '2026-06-02 07:00:00'),
+    (104, 4, 26.8, 34.82, 23.37, 0.47, 48.15, 73, 'Moderate', 'O3', '2026-06-02 07:30:00'),
+    (105, 5, 49.89, 58.64, 23.56, 0.73, 47.78, 99, 'Moderate', 'PM10', '2026-06-02 08:00:00'),
+    (101, 1, 39.84, 52.91, 30.39, 0.26, 25.01, 63, 'Moderate', 'PM10', '2026-06-02 08:30:00'),
+    (102, 2, 58.64, 65.3, 26.86, 0.76, 53.3, 149, 'Unhealthy', 'PM10', '2026-06-02 09:00:00'),
+    (103, 3, 20.23, 23.37, 21.82, 1.08, 47.27, 35, 'Good', 'O3', '2026-06-02 09:30:00'),
+    (104, 4, 39.28, 45.0, 27.18, 0.23, 46.98, 86, 'Moderate', 'O3', '2026-06-02 10:00:00'),
+    (105, 5, 40.92, 50.54, 28.95, 0.32, 47.59, 78, 'Moderate', 'PM10', '2026-06-02 10:30:00'),
+    (101, 1, 25.83, 30.02, 23.81, 0.97, 43.13, 55, 'Moderate', 'O3', '2026-06-02 11:00:00'),
+    (102, 2, 45.91, 54.47, 24.08, 0.71, 60.12, 55, 'Moderate', 'O3', '2026-06-02 11:30:00'),
+    (103, 3, 15.09, 20.83, 13.58, 0.73, 26.21, 46, 'Good', 'O3', '2026-06-02 12:00:00'),
+    (104, 4, 15.72, 21.64, 14.55, 0.43, 42.64, 29, 'Good', 'O3', '2026-06-02 12:30:00'),
+    (105, 5, 25.68, 28.56, 14.33, 0.63, 39.43, 94, 'Moderate', 'O3', '2026-06-02 13:00:00'),
+    (101, 1, 59.33, 70.06, 22.26, 1.04, 44.84, 131, 'Unhealthy', 'PM10', '2026-06-02 13:30:00'),
+    (102, 2, 73.45, 98.74, 27.28, 0.59, 31.74, 107, 'Unhealthy', 'PM10', '2026-06-02 14:00:00'),
+    (103, 3, 36.12, 48.55, 36.64, 0.52, 37.27, 71, 'Moderate', 'PM10', '2026-06-02 14:30:00'),
+    (104, 4, 20.13, 22.15, 27.33, 0.58, 51.59, 39, 'Good', 'O3', '2026-06-02 15:00:00'),
+    (105, 5, 42.61, 58.73, 28.9, 0.4, 46.47, 58, 'Moderate', 'PM10', '2026-06-02 15:30:00'),
+    (101, 1, 32.87, 36.29, 20.58, 0.89, 44.27, 58, 'Moderate', 'O3', '2026-06-02 16:00:00'),
+    (102, 2, 31.55, 38.64, 30.34, 0.44, 41.04, 80, 'Moderate', 'O3', '2026-06-02 16:30:00'),
+    (103, 3, 32.96, 44.8, 20.2, 1.05, 19.2, 83, 'Moderate', 'PM10', '2026-06-02 17:00:00'),
+    (104, 4, 55.77, 72.39, 16.76, 0.92, 33.25, 131, 'Unhealthy', 'PM10', '2026-06-02 17:30:00'),
+    (105, 5, 33.49, 38.73, 18.88, 0.42, 41.26, 53, 'Moderate', 'O3', '2026-06-02 18:00:00'),
+    (101, 1, 25.82, 34.54, 36.59, 0.75, 37.23, 53, 'Moderate', 'O3', '2026-06-02 18:30:00'),
+    (102, 2, 60.27, 68.1, 25.99, 0.84, 54.49, 110, 'Unhealthy', 'PM10', '2026-06-02 19:00:00'),
+    (103, 3, 48.63, 54.66, 21.23, 0.73, 54.99, 85, 'Moderate', 'O3', '2026-06-02 19:30:00'),
+    (104, 4, 18.9, 20.99, 29.46, 0.81, 69.92, 43, 'Good', 'O3', '2026-06-02 20:00:00'),
+    (105, 5, 44.5, 51.17, 20.57, 0.75, 40.87, 71, 'Moderate', 'PM10', '2026-06-02 20:30:00'),
+    (101, 1, 43.2, 54.85, 22.65, 0.57, 58.23, 90, 'Moderate', 'O3', '2026-06-02 21:00:00'),
+    (102, 2, 42.49, 52.6, 30.61, 0.49, 22.61, 80, 'Moderate', 'PM10', '2026-06-02 21:30:00'),
+    (103, 3, 57.8, 73.77, 19.34, 0.61, 41.43, 113, 'Unhealthy', 'PM10', '2026-06-02 22:00:00'),
+    (104, 4, 48.86, 58.08, 29.27, 0.86, 40.12, 93, 'Moderate', 'PM10', '2026-06-02 22:30:00'),
+    (105, 5, 29.57, 40.61, 22.69, 0.37, 54.25, 65, 'Moderate', 'O3', '2026-06-02 23:00:00'),
+    (101, 1, 18.63, 24.52, 14.13, 0.41, 23.13, 40, 'Good', 'PM10', '2026-06-02 23:30:00'),
+    (102, 2, 61.35, 74.2, 34.15, 1.18, 36.56, 113, 'Unhealthy', 'PM10', '2026-06-03 00:00:00'),
+    (103, 3, 26.03, 35.12, 21.86, 0.8, 59.76, 81, 'Moderate', 'O3', '2026-06-03 00:30:00'),
+    (104, 4, 33.73, 37.86, 24.01, 0.65, 34.31, 76, 'Moderate', 'PM10', '2026-06-03 01:00:00'),
+    (105, 5, 39.19, 49.42, 20.76, 0.4, 43.03, 94, 'Moderate', 'PM10', '2026-06-03 01:30:00'),
+    (101, 1, 32.93, 40.88, 11.85, 0.39, 33.66, 92, 'Moderate', 'PM10', '2026-06-03 02:00:00'),
+    (102, 2, 51.57, 58.89, 30.93, 1.02, 38.58, 132, 'Unhealthy', 'PM10', '2026-06-03 02:30:00'),
+    (103, 3, 39.38, 54.53, 19.96, 0.49, 27.02, 77, 'Moderate', 'PM10', '2026-06-03 03:00:00'),
+    (104, 4, 36.97, 48.32, 17.77, 0.62, 49.98, 66, 'Moderate', 'O3', '2026-06-03 03:30:00'),
+    (105, 5, 25.95, 31.34, 18.84, 0.78, 54.45, 80, 'Moderate', 'O3', '2026-06-03 04:00:00'),
+    (101, 1, 55.24, 66.29, 23.94, 1.17, 40.33, 114, 'Unhealthy', 'PM10', '2026-06-03 04:30:00'),
+    (102, 2, 60.2, 72.15, 32.16, 1.17, 61.53, 110, 'Unhealthy', 'PM10', '2026-06-03 05:00:00'),
+    (103, 3, 63.77, 72.67, 30.71, 0.53, 53.94, 138, 'Unhealthy', 'PM10', '2026-06-03 05:30:00'),
+    (104, 4, 53.79, 71.2, 13.19, 0.83, 35.13, 133, 'Unhealthy', 'PM10', '2026-06-03 06:00:00'),
+    (105, 5, 61.69, 73.44, 18.61, 0.74, 38.19, 131, 'Unhealthy', 'PM10', '2026-06-03 06:30:00'),
+    (101, 1, 57.93, 79.35, 21.72, 0.86, 50.62, 138, 'Unhealthy', 'PM10', '2026-06-03 07:00:00'),
+    (102, 2, 29.63, 37.97, 21.26, 0.98, 50.28, 92, 'Moderate', 'O3', '2026-06-03 07:30:00'),
+    (103, 3, 23.15, 27.05, 16.78, 0.8, 35.34, 33, 'Good', 'O3', '2026-06-03 08:00:00'),
+    (104, 4, 39.07, 44.05, 16.59, 0.93, 45.87, 98, 'Moderate', 'O3', '2026-06-03 08:30:00'),
+    (105, 5, 24.58, 29.47, 24.05, 0.73, 31.63, 47, 'Good', 'O3', '2026-06-03 09:00:00'),
+    (101, 1, 32.33, 40.48, 23.49, 0.77, 48.24, 57, 'Moderate', 'O3', '2026-06-03 09:30:00'),
+    (102, 2, 49.44, 60.75, 13.1, 0.6, 28.62, 86, 'Moderate', 'PM10', '2026-06-03 10:00:00'),
+    (103, 3, 44.05, 57.74, 26.74, 0.68, 47.65, 51, 'Moderate', 'PM10', '2026-06-03 10:30:00'),
+    (104, 4, 39.54, 55.02, 28.86, 0.87, 32.61, 61, 'Moderate', 'PM10', '2026-06-03 11:00:00'),
+    (105, 5, 41.22, 45.99, 22.12, 0.91, 52.55, 94, 'Moderate', 'O3', '2026-06-03 11:30:00'),
+    (101, 1, 50.82, 59.19, 17.15, 0.72, 52.71, 138, 'Unhealthy', 'PM10', '2026-06-03 12:00:00'),
+    (102, 2, 29.04, 32.01, 27.34, 0.68, 47.69, 59, 'Moderate', 'O3', '2026-06-03 12:30:00'),
+    (103, 3, 51.94, 59.15, 18.21, 0.69, 26.43, 123, 'Unhealthy', 'PM10', '2026-06-03 13:00:00'),
+    (104, 4, 74.53, 101.26, 25.12, 0.54, 33.7, 146, 'Unhealthy', 'PM10', '2026-06-03 13:30:00'),
+    (105, 5, 46.71, 64.66, 10.94, 0.67, 32.75, 57, 'Moderate', 'PM10', '2026-06-03 14:00:00'),
+    (101, 1, 42.26, 50.79, 27.24, 0.74, 46.26, 83, 'Moderate', 'PM10', '2026-06-03 14:30:00'),
+    (102, 2, 55.92, 77.59, 19.21, 0.57, 45.5, 112, 'Unhealthy', 'PM10', '2026-06-03 15:00:00'),
+    (103, 3, 44.76, 55.87, 30.39, 0.67, 23.8, 79, 'Moderate', 'PM10', '2026-06-03 15:30:00'),
+    (104, 4, 2, 3, 16.22, 0.74, 25.46, 45, 'Good', 'O3', '2026-06-03 16:00:00'),
+    (105, 5, 38.91, 43.47, 28.87, 0.78, 37.0, 56, 'Moderate', 'PM10', '2026-06-03 16:30:00'),
+    (101, 1, 33.17, 45.4, 9.53, 0.71, 34.23, 81, 'Moderate', 'PM10', '2026-06-03 17:00:00'),
+    (102, 2, 38.21, 53.29, 9.33, 0.85, 46.76, 53, 'Moderate', 'PM10', '2026-06-03 17:30:00'),
+    (103, 3, 45.91, 55.64, 20.84, 0.91, 33.08, 91, 'Moderate', 'PM10', '2026-06-03 18:00:00'),
+    (104, 4, 41.11, 54.15, 18.66, 0.51, 23.24, 60, 'Moderate', 'PM10', '2026-06-03 18:30:00'),
+    (105, 5, 52.47, 68.71, 16.49, 0.91, 47.48, 125, 'Unhealthy', 'PM10', '2026-06-03 19:00:00'),
+    (101, 1, 26.94, 37.69, 7.17, 0.73, 37.56, 93, 'Moderate', 'PM10', '2026-06-03 19:30:00'),
+    (102, 2, 42.75, 59.18, 17.12, 0.68, 41.96, 57, 'Moderate', 'PM10', '2026-06-03 20:00:00'),
+    (103, 3, 21.22, 28.92, 20.26, 0.49, 31.41, 24, 'Good', 'O3', '2026-06-03 20:30:00'),
+    (104, 4, 30.81, 37.94, 16.86, 0.98, 42.05, 69, 'Moderate', 'O3', '2026-06-03 21:00:00'),
+    (105, 5, 42.4, 56.62, 37.6, 0.81, 37.55, 94, 'Moderate', 'PM10', '2026-06-03 21:30:00'),
+    (101, 1, 51.23, 64.46, 34.59, 0.71, 44.65, 117, 'Unhealthy', 'PM10', '2026-06-03 22:00:00'),
+    (102, 2, 61.01, 76.55, 18.94, 0.8, 42.63, 111, 'Unhealthy', 'PM10', '2026-06-03 22:30:00'),
+    (103, 3, 59.37, 69.26, 18.51, 0.85, 43.14, 133, 'Unhealthy', 'PM10', '2026-06-03 23:00:00'),
+    (104, 4, 43.68, 49.35, 27.59, 0.68, 31.42, 60, 'Moderate', 'PM10', '2026-06-03 23:30:00'),
+    (105, 5, 32.41, 42.51, 23.15, 0.79, 47.48, 60, 'Moderate', 'O3', '2026-06-04 00:00:00'),
+    (101, 1, 44.01, 52.39, 24.47, 0.86, 43.64, 90, 'Moderate', 'PM10', '2026-06-04 00:30:00'),
+    (102, 2, 34.47, 43.25, 22.88, 0.85, 27.25, 66, 'Moderate', 'PM10', '2026-06-04 01:00:00'),
+    (103, 3, 30.19, 41.84, 21.45, 0.38, 36.0, 83, 'Moderate', 'PM10', '2026-06-04 01:30:00'),
+    (104, 4, 33.55, 39.46, 30.6, 0.64, 30.16, 91, 'Moderate', 'PM10', '2026-06-04 02:00:00'),
+    (105, 5, 61.94, 74.42, 29.05, 0.61, 26.84, 144, 'Unhealthy', 'PM10', '2026-06-04 02:30:00'),
+    (101, 1, 13.89, 18.51, 15.18, 0.64, 45.1, 21, 'Good', 'O3', '2026-06-04 03:00:00'),
+    (102, 2, 49.61, 55.12, 16.61, 0.64, 33.85, 100, 'Moderate', 'PM10', '2026-06-04 03:30:00'),
+    (103, 3, 69.98, 85.38, 9.78, 0.97, 38.19, 145, 'Unhealthy', 'PM10', '2026-06-04 04:00:00'),
+    (104, 4, 43.18, 48.52, 12.24, 0.37, 29.6, 85, 'Moderate', 'PM10', '2026-06-04 04:30:00'),
+    (105, 5, 49.51, 65.12, 25.38, 0.89, 24.85, 73, 'Moderate', 'PM10', '2026-06-04 05:00:00'),
+    (101, 1, 39.65, 51.6, 19.73, 0.49, 47.39, 98, 'Moderate', 'PM10', '2026-06-04 05:30:00'),
+    (102, 2, 44.82, 49.77, 29.9, 0.76, 32.56, 87, 'Moderate', 'PM10', '2026-06-04 06:00:00'),
+    (103, 3, 38.24, 42.95, 28.15, 0.9, 48.2, 71, 'Moderate', 'O3', '2026-06-04 06:30:00'),
+    (104, 4, 54.69, 66.51, 18.05, 0.66, 39.06, 140, 'Unhealthy', 'PM10', '2026-06-04 07:00:00'),
+    (105, 5, 70.21, 86.75, 32.85, 1.01, 34.83, 106, 'Unhealthy', 'PM10', '2026-06-04 07:30:00'),
+    (101, 1, 42.3, 53.51, 21.49, 0.9, 49.79, 95, 'Moderate', 'PM10', '2026-06-04 08:00:00'),
+    (102, 2, 45.03, 51.41, 24.62, 0.7, 39.29, 86, 'Moderate', 'PM10', '2026-06-04 08:30:00'),
+    (103, 3, 36.07, 40.39, 13.7, 0.86, 29.01, 77, 'Moderate', 'PM10', '2026-06-04 09:00:00'),
+    (104, 4, 33.0, 43.03, 17.13, 0.48, 57.32, 100, 'Moderate', 'O3', '2026-06-04 09:30:00'),
+    (105, 5, 27.52, 37.44, 24.31, 0.43, 36.94, 96, 'Moderate', 'PM10', '2026-06-04 10:00:00'),
+    (101, 1, 53.27, 61.73, 27.24, 1.0, 38.59, 141, 'Unhealthy', 'PM10', '2026-06-04 10:30:00'),
+    (102, 2, 40.65, 46.6, 16.96, 0.44, 24.62, 87, 'Moderate', 'PM10', '2026-06-04 11:00:00'),
+    (103, 3, 63.2, 74.54, 19.46, 0.8, 51.68, 140, 'Unhealthy', 'PM10', '2026-06-04 11:30:00'),
+    (104, 4, 25.26, 31.45, 23.55, 0.34, 38.3, 54, 'Moderate', 'O3', '2026-06-04 12:00:00'),
+    (105, 5, 44.56, 60.53, 26.45, 0.53, 67.53, 73, 'Moderate', 'O3', '2026-06-04 12:30:00'),
+    (101, 1, 51.57, 63.94, 21.58, 0.85, 47.51, 125, 'Unhealthy', 'PM10', '2026-06-04 13:00:00'),
+    (102, 2, 60.88, 84.02, 16.25, 0.71, 34.3, 111, 'Unhealthy', 'PM10', '2026-06-04 13:30:00'),
+    (103, 3, 32.17, 44.51, 4.78, 0.6, 41.03, 54, 'Moderate', 'PM10', '2026-06-04 14:00:00'),
+    (104, 4, 45.45, 50.11, 19.66, 0.88, 44.47, 67, 'Moderate', 'PM10', '2026-06-04 14:30:00'),
+    (105, 5, 41.26, 47.8, 18.22, 0.6, 22.96, 68, 'Moderate', 'PM10', '2026-06-04 15:00:00'),
+    (101, 1, 42.13, 51.06, 23.63, 0.94, 39.1, 74, 'Moderate', 'PM10', '2026-06-04 15:30:00'),
+    (102, 2, 34.07, 38.88, 17.59, 0.85, 27.08, 83, 'Moderate', 'PM10', '2026-06-04 16:00:00'),
+    (103, 3, 41.57, 56.24, 30.09, 0.65, 33.95, 83, 'Moderate', 'PM10', '2026-06-04 16:30:00'),
+    (104, 4, 51.7, 67.32, 28.02, 0.57, 43.33, 145, 'Unhealthy', 'PM10', '2026-06-04 17:00:00'),
+    (105, 5, 9.05, 11.53, 6.09, 0.58, 41.89, 35, 'Good', 'O3', '2026-06-04 17:30:00'),
+    (101, 1, 27.68, 36.1, 37.0, 0.83, 42.39, 71, 'Moderate', 'O3', '2026-06-04 18:00:00'),
+    (102, 2, 24.52, 30.44, 22.11, 0.9, 27.18, 42, 'Good', 'PM10', '2026-06-04 18:30:00'),
+    (103, 3, 58.43, 69.77, 28.68, 1.12, 35.51, 150, 'Unhealthy', 'PM10', '2026-06-04 19:00:00'),
+    (104, 4, 43.05, 59.72, 29.73, 0.71, 49.28, 70, 'Moderate', 'PM10', '2026-06-04 19:30:00'),
+    (105, 5, 22.9, 29.04, 29.96, 0.53, 37.33, 37, 'Good', 'O3', '2026-06-04 20:00:00'),
+    (101, 1, 69.24, 82.2, 20.64, 0.71, 56.87, 123, 'Unhealthy', 'PM10', '2026-06-04 20:30:00'),
+    (102, 2, 37.21, 43.96, 18.69, 0.69, 54.19, 66, 'Moderate', 'O3', '2026-06-04 21:00:00'),
+    (103, 3, 49.69, 60.82, 22.95, 0.8, 36.73, 100, 'Moderate', 'PM10', '2026-06-04 21:30:00'),
+    (104, 4, 57.26, 78.11, 17.05, 0.93, 42.19, 119, 'Unhealthy', 'PM10', '2026-06-04 22:00:00'),
+    (105, 5, 13.09, 17.24, 15.94, 0.97, 30.79, 25, 'Good', 'O3', '2026-06-04 22:30:00'),
+    (101, 1, 35.78, 47.82, 25.31, 0.98, 44.31, 53, 'Moderate', 'PM10', '2026-06-04 23:00:00'),
+    (102, 2, 52.43, 73.23, 22.01, 0.5, 36.46, 109, 'Unhealthy', 'PM10', '2026-06-04 23:30:00'),
+    (103, 3, 48.06, 59.48, 22.34, 0.85, 39.39, 87, 'Moderate', 'PM10', '2026-06-05 00:00:00'),
+    (104, 4, 21.41, 26.3, 15.17, 0.5, 47.37, 23, 'Good', 'O3', '2026-06-05 00:30:00'),
+    (105, 5, 50.76, 59.42, 22.88, 0.23, 35.26, 101, 'Unhealthy', 'PM10', '2026-06-05 01:00:00'),
+    (101, 1, 45.57, 52.31, 18.6, 0.64, 20.87, 96, 'Moderate', 'PM10', '2026-06-05 01:30:00'),
+    (102, 2, 9.84, 11.48, 26.93, 0.56, 12.4, 31, 'Good', 'NO2', '2026-06-05 02:00:00'),
+    (103, 3, 27.28, 31.8, 20.83, 0.75, 57.8, 56, 'Moderate', 'O3', '2026-06-05 02:30:00'),
+    (104, 4, 49.61, 66.91, 23.14, 0.51, 33.16, 84, 'Moderate', 'PM10', '2026-06-05 03:00:00'),
+    (105, 5, 12.55, 15.48, 22.54, 0.78, 41.9, 33, 'Good', 'O3', '2026-06-05 03:30:00');
+
+    -- Environment Weather Readings (200 rows)
+    INSERT INTO env_weather (zone_id, temperature, humidity, wind_speed, wind_direction, recorded_at) VALUES
+    (1, 30.1, 73.6, 2.8, 265.1, '2026-06-01 00:00:00'),
+    (2, 30.8, 76.2, 5.0, 202.0, '2026-06-01 00:30:00'),
+    (3, 30.6, 70.3, 1.9, 77.5, '2026-06-01 01:00:00'),
+    (4, 32.3, 79.5, 0.7, 193.0, '2026-06-01 01:30:00'),
+    (5, 27.0, 69.2, 4.0, 104.2, '2026-06-01 02:00:00'),
+    (1, 34.0, 78.9, 4.2, 241.2, '2026-06-01 02:30:00'),
+    (2, 31.8, 81.7, 5.1, 200.4, '2026-06-01 03:00:00'),
+    (3, 31.1, 72.6, 3.3, 328.6, '2026-06-01 03:30:00'),
+    (4, 28.6, 76.6, 3.0, 94.6, '2026-06-01 04:00:00'),
+    (5, 39.0, 61.6, 3.1, 309.9, '2026-06-01 04:30:00'),
+    (1, 33.6, 74.8, 5.9, 4.1, '2026-06-01 05:00:00'),
+    (2, 34.1, 73.7, 3.8, 1.2, '2026-06-01 05:30:00'),
+    (3, 31.9, 70.1, 1.7, 55.0, '2026-06-01 06:00:00'),
+    (4, 30.5, 71.1, 3.1, 130.6, '2026-06-01 06:30:00'),
+    (5, 33.0, 79.7, 5.3, 275.6, '2026-06-01 07:00:00'),
+    (1, 35.6, 92.9, 2.2, 271.8, '2026-06-01 07:30:00'),
+    (2, 28.7, 76.8, 3.3, 199.4, '2026-06-01 08:00:00'),
+    (3, 30.8, 76.9, 2.6, 85.7, '2026-06-01 08:30:00'),
+    (4, 30.6, 84.0, 2.4, 237.2, '2026-06-01 09:00:00'),
+    (5, 31.7, 81.6, 3.9, 122.1, '2026-06-01 09:30:00'),
+    (1, 25.5, 78.8, 5.4, 308.1, '2026-06-01 10:00:00'),
+    (2, 30.6, 77.8, 2.3, 174.8, '2026-06-01 10:30:00'),
+    (3, 34.4, 68.8, 2.5, 262.9, '2026-06-01 11:00:00'),
+    (4, 32.1, 66.2, 2.1, 269.2, '2026-06-01 11:30:00'),
+    (5, 31.9, 77.5, 1.1, 84.6, '2026-06-01 12:00:00'),
+    (1, 28.6, 69.3, 1.4, 113.9, '2026-06-01 12:30:00'),
+    (2, 29.8, 81.6, 3.0, 164.9, '2026-06-01 13:00:00'),
+    (3, 32.4, 87.1, 0.9, 133.0, '2026-06-01 13:30:00'),
+    (4, 26.8, 72.9, 0.0, 37.3, '2026-06-01 14:00:00'),
+    (5, 29.0, 64.9, 1.5, 73.3, '2026-06-01 14:30:00'),
+    (1, 27.4, 63.8, 4.3, 47.1, '2026-06-01 15:00:00'),
+    (2, 27.4, 89.8, 4.4, 325.3, '2026-06-01 15:30:00'),
+    (3, 26.7, 89.0, 3.4, 128.8, '2026-06-01 16:00:00'),
+    (4, 28.6, 74.9, 0.0, 85.2, '2026-06-01 16:30:00'),
+    (5, 31.0, 66.9, 1.8, 89.3, '2026-06-01 17:00:00'),
+    (1, 31.2, 78.6, 1.5, 109.8, '2026-06-01 17:30:00'),
+    (2, 32.5, 73.7, 2.0, 353.1, '2026-06-01 18:00:00'),
+    (3, 30.2, 85.5, 3.5, 124.4, '2026-06-01 18:30:00'),
+    (4, 30.4, 87.6, 6.4, 193.8, '2026-06-01 19:00:00'),
+    (5, 31.2, 84.8, 2.0, 238.8, '2026-06-01 19:30:00'),
+    (1, 30.1, 79.0, 0.0, 243.8, '2026-06-01 20:00:00'),
+    (2, 30.5, 78.5, 5.6, 218.3, '2026-06-01 20:30:00'),
+    (3, 31.0, 77.9, 0.9, 120.6, '2026-06-01 21:00:00'),
+    (4, 32.1, 97.0, 4.2, 220.0, '2026-06-01 21:30:00'),
+    (5, 28.6, 75.2, 2.9, 270.3, '2026-06-01 22:00:00'),
+    (1, 36.1, 65.0, 3.4, 330.2, '2026-06-01 22:30:00'),
+    (2, 35.5, 69.8, 1.2, 181.7, '2026-06-01 23:00:00'),
+    (3, 27.7, 75.2, 0.1, 99.8, '2026-06-01 23:30:00'),
+    (4, 30.2, 82.0, 2.2, 83.2, '2026-06-02 00:00:00'),
+    (5, 32.2, 89.0, 4.1, 140.2, '2026-06-02 00:30:00'),
+    (1, 32.8, 75.3, 3.1, 343.1, '2026-06-02 01:00:00'),
+    (2, 29.4, 73.7, 4.7, 139.9, '2026-06-02 01:30:00'),
+    (3, 25.2, 71.3, 1.1, 30.2, '2026-06-02 02:00:00'),
+    (4, 32.7, 68.7, 5.2, 136.4, '2026-06-02 02:30:00'),
+    (5, 36.3, 81.3, 3.1, 344.5, '2026-06-02 03:00:00'),
+    (1, 27.5, 83.4, 4.6, 203.0, '2026-06-02 03:30:00'),
+    (2, 29.6, 61.4, 3.7, 208.3, '2026-06-02 04:00:00'),
+    (3, 34.7, 85.9, 4.1, 225.7, '2026-06-02 04:30:00'),
+    (4, 31.0, 67.8, 1.7, 182.1, '2026-06-02 05:00:00'),
+    (5, 34.4, 81.9, 2.0, 55.1, '2026-06-02 05:30:00'),
+    (1, 27.8, 75.9, 2.9, 306.5, '2026-06-02 06:00:00'),
+    (2, 33.3, 71.4, 1.8, 177.9, '2026-06-02 06:30:00'),
+    (3, 29.9, 68.9, 6.6, 30.8, '2026-06-02 07:00:00'),
+    (4, 27.1, 73.6, 3.1, 105.9, '2026-06-02 07:30:00'),
+    (5, 26.8, 81.0, 1.9, 97.5, '2026-06-02 08:00:00'),
+    (1, 32.6, 73.1, 2.1, 265.8, '2026-06-02 08:30:00'),
+    (2, 29.8, 82.3, 2.2, 45.6, '2026-06-02 09:00:00'),
+    (3, 29.3, 58.8, 3.2, 206.6, '2026-06-02 09:30:00'),
+    (4, 31.2, 76.9, 1.0, 247.1, '2026-06-02 10:00:00'),
+    (5, 31.5, 76.0, 1.0, 284.6, '2026-06-02 10:30:00'),
+    (1, 29.3, 85.5, 1.1, 341.0, '2026-06-02 11:00:00'),
+    (2, 31.8, 79.5, 4.3, 248.1, '2026-06-02 11:30:00'),
+    (3, 28.3, 58.2, 3.5, 238.0, '2026-06-02 12:00:00'),
+    (4, 26.1, 76.8, 3.4, 285.3, '2026-06-02 12:30:00'),
+    (5, 28.6, 56.8, 1.2, 29.0, '2026-06-02 13:00:00'),
+    (1, 31.6, 80.4, 1.3, 342.2, '2026-06-02 13:30:00'),
+    (2, 27.8, 74.0, 2.1, 156.9, '2026-06-02 14:00:00'),
+    (3, 31.7, 79.5, 2.0, 249.7, '2026-06-02 14:30:00'),
+    (4, 30.5, 79.0, 3.4, 296.9, '2026-06-02 15:00:00'),
+    (5, 31.5, 75.5, 0.9, 273.5, '2026-06-02 15:30:00'),
+    (1, 34.0, 77.0, 3.7, 111.8, '2026-06-02 16:00:00'),
+    (2, 29.5, 72.2, 2.3, 335.7, '2026-06-02 16:30:00'),
+    (3, 28.2, 72.5, 4.6, 316.5, '2026-06-02 17:00:00'),
+    (4, 33.5, 74.9, 3.1, 261.3, '2026-06-02 17:30:00'),
+    (5, 28.7, 83.4, 1.4, 115.8, '2026-06-02 18:00:00'),
+    (1, 34.8, 71.2, 4.5, 328.7, '2026-06-02 18:30:00'),
+    (2, 35.0, 89.8, 2.7, 304.1, '2026-06-02 19:00:00'),
+    (3, 34.5, 87.4, 4.2, 95.4, '2026-06-02 19:30:00'),
+    (4, 28.9, 79.8, 2.5, 314.0, '2026-06-02 20:00:00'),
+    (5, 26.4, 93.7, 5.2, 273.7, '2026-06-02 20:30:00'),
+    (1, 31.1, 68.6, 2.4, 191.2, '2026-06-02 21:00:00'),
+    (2, 32.9, 71.2, 1.4, 209.9, '2026-06-02 21:30:00'),
+    (3, 33.6, 68.0, 3.9, 124.4, '2026-06-02 22:00:00'),
+    (4, 35.3, 90.7, 3.0, 38.4, '2026-06-02 22:30:00'),
+    (5, 30.2, 75.6, 4.7, 350.4, '2026-06-02 23:00:00'),
+    (1, 28.0, 69.2, 2.1, 229.1, '2026-06-02 23:30:00'),
+    (2, 33.4, 81.4, 5.6, 12.0, '2026-06-03 00:00:00'),
+    (3, 32.8, 81.7, 4.4, 349.6, '2026-06-03 00:30:00'),
+    (4, 32.5, 73.6, 4.9, 168.6, '2026-06-03 01:00:00'),
+    (5, 27.1, 89.2, 2.4, 131.6, '2026-06-03 01:30:00'),
+    (1, 30.3, 82.8, 2.1, 242.9, '2026-06-03 02:00:00'),
+    (2, 33.5, 88.7, 4.1, 327.3, '2026-06-03 02:30:00'),
+    (3, 31.9, 78.9, 1.6, 133.5, '2026-06-03 03:00:00'),
+    (4, 28.4, 66.5, 0.7, 221.6, '2026-06-03 03:30:00'),
+    (5, 31.2, 72.1, 2.3, 351.9, '2026-06-03 04:00:00'),
+    (1, 33.9, 79.6, 3.6, 230.2, '2026-06-03 04:30:00'),
+    (2, 34.4, 80.7, 3.3, 313.0, '2026-06-03 05:00:00'),
+    (3, 30.6, 84.9, 2.9, 287.4, '2026-06-03 05:30:00'),
+    (4, 29.8, 79.4, 5.3, 189.3, '2026-06-03 06:00:00'),
+    (5, 30.4, 77.0, 5.0, 261.7, '2026-06-03 06:30:00'),
+    (1, 32.0, 68.1, 4.8, 159.6, '2026-06-03 07:00:00'),
+    (2, 33.0, 68.2, 2.6, 358.0, '2026-06-03 07:30:00'),
+    (3, 28.0, 63.9, 2.8, 162.5, '2026-06-03 08:00:00'),
+    (4, 31.1, 72.7, 4.1, 343.2, '2026-06-03 08:30:00'),
+    (5, 30.2, 60.4, 1.1, 202.1, '2026-06-03 09:00:00'),
+    (1, 26.9, 77.2, 2.8, 103.5, '2026-06-03 09:30:00'),
+    (2, 28.6, 83.2, 3.9, 81.4, '2026-06-03 10:00:00'),
+    (3, 27.9, 93.2, 3.6, 298.5, '2026-06-03 10:30:00'),
+    (4, 31.1, 79.0, 2.7, 266.7, '2026-06-03 11:00:00'),
+    (5, 32.4, 66.2, 4.7, 279.6, '2026-06-03 11:30:00'),
+    (1, 32.9, 79.2, 1.2, 149.1, '2026-06-03 12:00:00'),
+    (2, 32.9, 63.2, 3.2, 16.3, '2026-06-03 12:30:00'),
+    (3, 30.7, 68.4, 4.3, 155.0, '2026-06-03 13:00:00'),
+    (4, 29.2, 89.3, 4.3, 15.2, '2026-06-03 13:30:00'),
+    (5, 29.2, 69.9, 0.0, 61.9, '2026-06-03 14:00:00'),
+    (1, 32.5, 75.4, 5.0, 188.6, '2026-06-03 14:30:00'),
+    (2, 28.4, 67.7, 3.9, 126.4, '2026-06-03 15:00:00'),
+    (3, 31.7, 64.2, 1.5, 235.9, '2026-06-03 15:30:00'),
+    (4, 28.3, 60.0, 0.3, 116.3, '2026-06-03 16:00:00'),
+    (5, 31.2, 74.6, 3.5, 182.6, '2026-06-03 16:30:00'),
+    (1, 28.3, 68.7, 1.1, 285.0, '2026-06-03 17:00:00'),
+    (2, 28.7, 54.9, 3.0, 162.1, '2026-06-03 17:30:00'),
+    (3, 30.5, 83.6, 1.3, 57.1, '2026-06-03 18:00:00'),
+    (4, 33.4, 73.2, 2.6, 34.0, '2026-06-03 18:30:00'),
+    (5, 28.8, 84.2, 3.9, 348.3, '2026-06-03 19:00:00'),
+    (1, 29.7, 70.6, 2.0, 46.0, '2026-06-03 19:30:00'),
+    (2, 28.4, 78.5, 2.4, 77.1, '2026-06-03 20:00:00'),
+    (3, 31.3, 65.0, 2.9, 265.8, '2026-06-03 20:30:00'),
+    (4, 33.0, 87.9, 3.4, 59.6, '2026-06-03 21:00:00'),
+    (5, 33.2, 75.2, 0.4, 84.2, '2026-06-03 21:30:00'),
+    (1, 37.3, 67.5, 1.8, 137.4, '2026-06-03 22:00:00'),
+    (2, 29.2, 83.7, 3.6, 133.6, '2026-06-03 22:30:00'),
+    (3, 29.7, 92.2, 4.0, 340.6, '2026-06-03 23:00:00'),
+    (4, 30.6, 69.4, 4.1, 29.4, '2026-06-03 23:30:00'),
+    (5, 31.8, 80.0, 4.1, 50.0, '2026-06-04 00:00:00'),
+    (1, 31.4, 62.7, 2.3, 189.9, '2026-06-04 00:30:00'),
+    (2, 29.3, 76.0, 4.7, 5.9, '2026-06-04 01:00:00'),
+    (3, 32.0, 70.3, 2.6, 240.5, '2026-06-04 01:30:00'),
+    (4, 28.2, 72.3, 0.9, 353.1, '2026-06-04 02:00:00'),
+    (5, 33.9, 83.4, 4.2, 272.3, '2026-06-04 02:30:00'),
+    (1, 26.7, 77.7, 1.1, 22.7, '2026-06-04 03:00:00'),
+    (2, 31.0, 72.2, 4.2, 143.3, '2026-06-04 03:30:00'),
+    (3, 34.0, 78.5, 2.6, 157.3, '2026-06-04 04:00:00'),
+    (4, 31.9, 56.8, 3.1, 186.9, '2026-06-04 04:30:00'),
+    (5, 30.2, 78.6, 2.4, 160.5, '2026-06-04 05:00:00'),
+    (1, 31.8, 68.6, 1.9, 230.1, '2026-06-04 05:30:00'),
+    (2, 27.8, 57.1, 4.3, 281.2, '2026-06-04 06:00:00'),
+    (3, 32.3, 79.5, 3.2, 161.9, '2026-06-04 06:30:00'),
+    (4, 29.4, 70.1, 4.9, 179.6, '2026-06-04 07:00:00'),
+    (5, 33.2, 71.0, 6.3, 176.8, '2026-06-04 07:30:00'),
+    (1, 32.9, 55.5, 5.2, 255.4, '2026-06-04 08:00:00'),
+    (2, 33.8, 65.8, 1.0, 183.1, '2026-06-04 08:30:00'),
+    (3, 28.0, 71.1, 3.8, 318.2, '2026-06-04 09:00:00'),
+    (4, 30.8, 76.4, 2.5, 350.0, '2026-06-04 09:30:00'),
+    (5, 27.3, 71.6, 3.1, 181.0, '2026-06-04 10:00:00'),
+    (1, 31.9, 78.0, 6.6, 186.8, '2026-06-04 10:30:00'),
+    (2, 29.5, 84.3, 2.1, 338.9, '2026-06-04 11:00:00'),
+    (3, 27.6, 90.4, 3.8, 29.2, '2026-06-04 11:30:00'),
+    (4, 28.6, 67.8, 2.1, 344.3, '2026-06-04 12:00:00'),
+    (5, 31.4, 79.5, 4.3, 167.2, '2026-06-04 12:30:00'),
+    (1, 31.8, 74.3, 1.7, 114.8, '2026-06-04 13:00:00'),
+    (2, 31.7, 80.5, 1.8, 346.5, '2026-06-04 13:30:00'),
+    (3, 27.5, 75.1, 1.7, 8.3, '2026-06-04 14:00:00'),
+    (4, 32.8, 72.9, 5.0, 303.3, '2026-06-04 14:30:00'),
+    (5, 29.9, 61.5, 2.0, 205.2, '2026-06-04 15:00:00'),
+    (1, 30.4, 80.1, 1.1, 219.9, '2026-06-04 15:30:00'),
+    (2, 30.6, 69.7, 1.2, 16.3, '2026-06-04 16:00:00'),
+    (3, 31.4, 86.8, 5.7, 114.6, '2026-06-04 16:30:00'),
+    (4, 26.7, 72.5, 2.2, 132.6, '2026-06-04 17:00:00'),
+    (5, 26.7, 67.6, 1.5, 95.6, '2026-06-04 17:30:00'),
+    (1, 32.2, 84.9, 0.9, 53.2, '2026-06-04 18:00:00'),
+    (2, 30.8, 67.8, 3.8, 73.4, '2026-06-04 18:30:00'),
+    (3, 31.6, 79.2, 2.0, 189.1, '2026-06-04 19:00:00'),
+    (4, 32.5, 83.1, 1.3, 289.2, '2026-06-04 19:30:00'),
+    (5, 31.0, 62.6, 2.4, 172.7, '2026-06-04 20:00:00'),
+    (1, 33.7, 58.7, 5.9, 294.5, '2026-06-04 20:30:00'),
+    (2, 33.7, 69.6, 3.0, 298.0, '2026-06-04 21:00:00'),
+    (3, 33.1, 75.6, 5.2, 191.1, '2026-06-04 21:30:00'),
+    (4, 34.7, 90.7, 3.9, 235.0, '2026-06-04 22:00:00'),
+    (5, 28.4, 64.4, 0.4, 32.2, '2026-06-04 22:30:00'),
+    (1, 26.4, 82.5, 3.4, 300.9, '2026-06-04 23:00:00'),
+    (2, 29.0, 85.3, 3.1, 38.6, '2026-06-04 23:30:00'),
+    (3, 32.2, 67.8, 3.3, 58.5, '2026-06-05 00:00:00'),
+    (4, 26.1, 72.6, 2.1, 219.9, '2026-06-05 00:30:00'),
+    (5, 31.0, 79.0, 2.5, 93.9, '2026-06-05 01:00:00'),
+    (1, 34.3, 74.5, 4.4, 85.0, '2026-06-05 01:30:00'),
+    (2, 31.0, 62.8, 0.7, 132.3, '2026-06-05 02:00:00'),
+    (3, 32.6, 66.3, 4.0, 169.5, '2026-06-05 02:30:00'),
+    (4, 27.5, 73.4, 0.8, 40.4, '2026-06-05 03:00:00'),
+    (5, 30.2, 63.7, 3.8, 258.0, '2026-06-05 03:30:00');
+
+    -- Citizen Reports (20 rows)
+    INSERT INTO citizen_reports (citizen_id, category, description, zone_id, status) VALUES
+    (49, 'industrial_smoke', 'Pembakaran sampah liar terjadi hampir setiap sore', 3, 'resolved'),
+    (27, 'air_pollution', 'Pembakaran sampah liar terjadi hampir setiap sore', 2, 'pending'),
+    (17, 'burning', 'Polusi dari kemacetan lalu lintas semakin parah', 3, 'in_progress'),
+    (13, 'industrial_smoke', 'Pembakaran sampah liar terjadi hampir setiap sore', 4, 'in_progress'),
+    (32, 'burning', 'Asap hitam tebal terlihat dari cerobong pabrik', 3, 'rejected'),
+    (47, 'other', 'Bau bahan kimia tercium kuat di sekitar perumahan', 4, 'in_progress'),
+    (47, 'industrial_smoke', 'Debu konstruksi mengganggu pernapasan warga sekitar', 2, 'rejected'),
+    (12, 'burning', 'Asap kendaraan sangat tebal di area ini setiap pagi', 5, 'pending'),
+    (5, 'other', 'Asap kendaraan sangat tebal di area ini setiap pagi', 1, 'rejected'),
+    (9, 'other', 'Pembakaran sampah liar terjadi hampir setiap sore', 1, 'in_progress'),
+    (1, 'dust', 'Bau bahan kimia tercium kuat di sekitar perumahan', 3, 'pending'),
+    (40, 'other', 'Bau bahan kimia tercium kuat di sekitar perumahan', 4, 'pending'),
+    (1, 'burning', 'Polusi dari kemacetan lalu lintas semakin parah', 1, 'pending'),
+    (34, 'other', 'Kualitas udara terasa sangat buruk sejak beberapa hari', 5, 'resolved'),
+    (2, 'burning', 'Polusi dari kemacetan lalu lintas semakin parah', 2, 'pending'),
+    (7, 'burning', 'Debu konstruksi mengganggu pernapasan warga sekitar', 2, 'in_progress'),
+    (40, 'burning', 'Kualitas udara terasa sangat buruk sejak beberapa hari', 3, 'resolved'),
+    (26, 'air_pollution', 'Asap hitam tebal terlihat dari cerobong pabrik', 4, 'rejected'),
+    (37, 'dust', 'Pembakaran sampah liar terjadi hampir setiap sore', 3, 'pending'),
+    (42, 'other', 'Asap kendaraan sangat tebal di area ini setiap pagi', 1, 'rejected');
+
+    -- Citizen Notifications (30 rows)
+    INSERT INTO citizen_notifications (citizen_id, title, body, is_read) VALUES
+    (25, 'Laporan Telah Selesai Ditindaklanjuti', 'Laporan yang Anda ajukan telah selesai ditindaklanjuti oleh petugas terkait.', 1),
+    (36, 'Laporan Telah Selesai Ditindaklanjuti', 'Laporan yang Anda ajukan telah selesai ditindaklanjuti oleh petugas terkait.', 0),
+    (4, 'Laporan Anda Diterima', 'Laporan kerusakan/keluhan Anda telah diterima dan sedang ditinjau oleh petugas.', 0),
+    (45, 'Status Laporan Diperbarui', 'Status laporan Anda telah diperbarui menjadi sedang diproses.', 1),
+    (6, 'Laporan Telah Selesai Ditindaklanjuti', 'Laporan yang Anda ajukan telah selesai ditindaklanjuti oleh petugas terkait.', 0),
+    (28, 'Peringatan Kualitas Udara', 'Kualitas udara di zona Anda saat ini dalam kategori Tidak Sehat. Disarankan mengurangi aktivitas luar ruangan.', 0),
+    (37, 'Laporan Anda Diterima', 'Laporan kerusakan/keluhan Anda telah diterima dan sedang ditinjau oleh petugas.', 1),
+    (34, 'Laporan Anda Diterima', 'Laporan kerusakan/keluhan Anda telah diterima dan sedang ditinjau oleh petugas.', 0),
+    (15, 'Status Laporan Diperbarui', 'Status laporan Anda telah diperbarui menjadi sedang diproses.', 0),
+    (45, 'Laporan Telah Selesai Ditindaklanjuti', 'Laporan yang Anda ajukan telah selesai ditindaklanjuti oleh petugas terkait.', 1),
+    (18, 'Laporan Anda Diterima', 'Laporan kerusakan/keluhan Anda telah diterima dan sedang ditinjau oleh petugas.', 0),
+    (5, 'Peringatan Kualitas Udara', 'Kualitas udara di zona Anda saat ini dalam kategori Tidak Sehat. Disarankan mengurangi aktivitas luar ruangan.', 0),
+    (35, 'Laporan Anda Diterima', 'Laporan kerusakan/keluhan Anda telah diterima dan sedang ditinjau oleh petugas.', 1),
+    (12, 'Peringatan Kualitas Udara', 'Kualitas udara di zona Anda saat ini dalam kategori Tidak Sehat. Disarankan mengurangi aktivitas luar ruangan.', 0),
+    (2, 'Status Laporan Diperbarui', 'Status laporan Anda telah diperbarui menjadi sedang diproses.', 0),
+    (38, 'Status Laporan Diperbarui', 'Status laporan Anda telah diperbarui menjadi sedang diproses.', 1),
+    (49, 'Laporan Telah Selesai Ditindaklanjuti', 'Laporan yang Anda ajukan telah selesai ditindaklanjuti oleh petugas terkait.', 0),
+    (5, 'Peringatan Kualitas Udara', 'Kualitas udara di zona Anda saat ini dalam kategori Tidak Sehat. Disarankan mengurangi aktivitas luar ruangan.', 0),
+    (11, 'Status Laporan Diperbarui', 'Status laporan Anda telah diperbarui menjadi sedang diproses.', 1),
+    (37, 'Laporan Telah Selesai Ditindaklanjuti', 'Laporan yang Anda ajukan telah selesai ditindaklanjuti oleh petugas terkait.', 0),
+    (44, 'Peringatan Kualitas Udara', 'Kualitas udara di zona Anda saat ini dalam kategori Tidak Sehat. Disarankan mengurangi aktivitas luar ruangan.', 0),
+    (25, 'Status Laporan Diperbarui', 'Status laporan Anda telah diperbarui menjadi sedang diproses.', 1),
+    (45, 'Laporan Anda Diterima', 'Laporan kerusakan/keluhan Anda telah diterima dan sedang ditinjau oleh petugas.', 0),
+    (33, 'Peringatan Kualitas Udara', 'Kualitas udara di zona Anda saat ini dalam kategori Tidak Sehat. Disarankan mengurangi aktivitas luar ruangan.', 0),
+    (4, 'Laporan Anda Diterima', 'Laporan kerusakan/keluhan Anda telah diterima dan sedang ditinjau oleh petugas.', 1),
+    (28, 'Status Laporan Diperbarui', 'Status laporan Anda telah diperbarui menjadi sedang diproses.', 0),
+    (5, 'Peringatan Kualitas Udara', 'Kualitas udara di zona Anda saat ini dalam kategori Tidak Sehat. Disarankan mengurangi aktivitas luar ruangan.', 0),
+    (39, 'Laporan Telah Selesai Ditindaklanjuti', 'Laporan yang Anda ajukan telah selesai ditindaklanjuti oleh petugas terkait.', 1),
+    (50, 'Peringatan Kualitas Udara', 'Kualitas udara di zona Anda saat ini dalam kategori Tidak Sehat. Disarankan mengurangi aktivitas luar ruangan.', 0),
+    (2, 'Peringatan Kualitas Udara', 'Kualitas udara di zona Anda saat ini dalam kategori Tidak Sehat. Disarankan mengurangi aktivitas luar ruangan.', 0);
+
+    -- Environment Alerts (15 rows, sample data for demo fallback)
+    INSERT INTO env_alerts (zone_id, event, alert_type, pollutant, anomaly_score, severity, value, threshold) VALUES
+    (4, 'anomaly.alert', 'anomaly_detected', 'PM10', 0.7878, 'Kritis', 138.81, 77.14),
+    (5, 'anomaly.alert', 'anomaly_detected', 'PM2.5', 0.8932, 'Kritis', 182.7, 95.85),
+    (2, 'anomaly.alert', 'anomaly_detected', 'PM10', 0.6862, 'Kritis', 103.85, 52.09),
+    (3, 'anomaly.alert', 'anomaly_detected', 'NO2', 0.594, 'Kritis', 101.35, 63.78),
+    (5, 'anomaly.alert', 'anomaly_detected', 'PM2.5', 0.5885, 'Peringatan', 162.05, 110.04),
+    (3, 'anomaly.alert', 'anomaly_detected', 'PM2.5', 0.7279, 'Kritis', 191.29, 137.24),
+    (5, 'anomaly.alert', 'aqi_threshold', 'O3', 0.8447, 'Peringatan', 112.04, 65.06),
+    (3, 'anomaly.alert', 'anomaly_detected', 'PM10', 0.6219, 'Peringatan', 125.88, 74.26),
+    (1, 'anomaly.alert', 'anomaly_detected', 'NO2', 0.86, 'Peringatan', 154.45, 105.8),
+    (4, 'anomaly.alert', 'aqi_threshold', 'PM10', 0.5529, 'Kritis', 141.44, 106.43),
+    (4, 'anomaly.alert', 'anomaly_detected', 'CO', 0.7352, 'Kritis', 197.06, 137.02),
+    (5, 'anomaly.alert', 'aqi_threshold', 'NO2', 0.8094, 'Kritis', 180.39, 116.12),
+    (2, 'anomaly.alert', 'anomaly_detected', 'NO2', 0.866, 'Kritis', 172.28, 136.16),
+    (2, 'anomaly.alert', 'anomaly_detected', 'CO', 0.9011, 'Kritis', 141.08, 75.36),
+    (5, 'anomaly.alert', 'aqi_threshold', 'O3', 0.8431, 'Peringatan', 161.51, 126.93);

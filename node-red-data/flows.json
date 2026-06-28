@@ -1,0 +1,361 @@
+[
+    {
+        "id": "b0057b0efa72797c",
+        "type": "tab",
+        "label": "Air Quality",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "5361d381fdcc5674",
+        "type": "tab",
+        "label": "Weather",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "4ecb101782125ccc",
+        "type": "tab",
+        "label": "OAuth",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "7c094e86c6fa17c5",
+        "type": "mqtt-broker",
+        "name": "localhost",
+        "broker": "localhost",
+        "port": 1883,
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": 4,
+        "keepalive": 60,
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "e9bb75f11b60b45e",
+        "type": "mqtt in",
+        "z": "b0057b0efa72797c",
+        "name": "Air Quality",
+        "topic": "city/+/airquality",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "7c094e86c6fa17c5",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 120,
+        "y": 200,
+        "wires": [
+            [
+                "f2b04dbe7388d3f9"
+            ]
+        ]
+    },
+    {
+        "id": "f2b04dbe7388d3f9",
+        "type": "function",
+        "z": "b0057b0efa72797c",
+        "name": "Transform Air Quality",
+        "func": "const token = flow.get(\"access_token\");\n\nmsg.headers = {\n    \"Content-Type\": \"application/json\",\n    \"Authorization\": \"Bearer \" + token\n};\n\nmsg.payload = {\n    station_id: msg.payload.station_id,\n    zone_id: msg.payload.zone_id,\n    pm25: msg.payload.pm25,\n    pm10: msg.payload.pm10,\n    no2: msg.payload.no2,\n    co: msg.payload.co,\n    o3: msg.payload.o3,\n    timestamp: msg.payload.timestamp\n};\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 320,
+        "y": 200,
+        "wires": [
+            [
+                "eb057e56113ebe1e"
+            ]
+        ]
+    },
+    {
+        "id": "eb057e56113ebe1e",
+        "type": "http request",
+        "z": "b0057b0efa72797c",
+        "name": "",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "http://localhost:3000/iot/airquality",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 530,
+        "y": 200,
+        "wires": [
+            [
+                "4ec24f3e8a286046"
+            ]
+        ]
+    },
+    {
+        "id": "4ec24f3e8a286046",
+        "type": "debug",
+        "z": "b0057b0efa72797c",
+        "name": "debug 1",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 700,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "721cf0b657dc9e52",
+        "type": "function",
+        "z": "5361d381fdcc5674",
+        "name": "Transform Weather",
+        "func": "const token = flow.get(\"access_token\");\n\nmsg.headers = {\n    \"Content-Type\": \"application/json\",\n    \"Authorization\": \"Bearer \" + token\n};\n\nmsg.payload = {\n    station_id: msg.payload.station_id,\n    zone_id: msg.payload.zone_id,\n    temperature: msg.payload.temperature,\n    humidity: msg.payload.humidity,\n    wind_speed: msg.payload.wind_speed,\n    wind_direction: msg.payload.wind_direction,\n    timestamp: msg.payload.timestamp\n};\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 370,
+        "y": 220,
+        "wires": [
+            [
+                "76add068ad190453"
+            ]
+        ]
+    },
+    {
+        "id": "4247cacab18fbbe3",
+        "type": "mqtt in",
+        "z": "5361d381fdcc5674",
+        "name": "Weather",
+        "topic": "city/+/weather",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "7c094e86c6fa17c5",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 180,
+        "y": 220,
+        "wires": [
+            [
+                "721cf0b657dc9e52"
+            ]
+        ]
+    },
+    {
+        "id": "76add068ad190453",
+        "type": "http request",
+        "z": "5361d381fdcc5674",
+        "name": "",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "http://localhost:3000/iot/weather",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 570,
+        "y": 220,
+        "wires": [
+            [
+                "083a39725c69fcec"
+            ]
+        ]
+    },
+    {
+        "id": "083a39725c69fcec",
+        "type": "debug",
+        "z": "5361d381fdcc5674",
+        "name": "debug 2",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 740,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "b81c43d9f283d075",
+        "type": "catch",
+        "z": "5361d381fdcc5674",
+        "name": "Catches errors",
+        "scope": null,
+        "uncaught": false,
+        "x": 200,
+        "y": 280,
+        "wires": [
+            [
+                "081774dfbc870433"
+            ]
+        ]
+    },
+    {
+        "id": "081774dfbc870433",
+        "type": "file",
+        "z": "5361d381fdcc5674",
+        "name": "Catch Fil",
+        "filename": "C:\\Users\\lenovo\\Codes\\Sixth Semester\\PPLOS\\UAS\\smart-air-quality-monitoring\\ml-service\\data",
+        "filenameType": "str",
+        "appendNewline": true,
+        "createDir": false,
+        "overwriteFile": "false",
+        "encoding": "none",
+        "x": 380,
+        "y": 280,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "052892b3d2f507e6",
+        "type": "inject",
+        "z": "4ecb101782125ccc",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "3300",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "0.5",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 120,
+        "wires": [
+            [
+                "20be3b479672c73a"
+            ]
+        ]
+    },
+    {
+        "id": "20be3b479672c73a",
+        "type": "function",
+        "z": "4ecb101782125ccc",
+        "name": "Prepare OAuth Request",
+        "func": "msg.headers = {\n    \"Content-Type\": \"application/json\"\n};\n\nmsg.payload = {\n    grant_type: \"client_credentials\",\n    client_id: \"test-client\",\n    client_secret: \"test-secret\"\n};\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 330,
+        "y": 120,
+        "wires": [
+            [
+                "8ebc7a0ac99fe7f0"
+            ]
+        ]
+    },
+    {
+        "id": "8ebc7a0ac99fe7f0",
+        "type": "http request",
+        "z": "4ecb101782125ccc",
+        "name": "",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "http://localhost:3002/oauth/token",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 530,
+        "y": 120,
+        "wires": [
+            [
+                "d7367bdd2a3f4d07"
+            ]
+        ]
+    },
+    {
+        "id": "d7367bdd2a3f4d07",
+        "type": "function",
+        "z": "4ecb101782125ccc",
+        "name": "Save Access Token",
+        "func": "flow.set(\"access_token\", msg.payload.data.access_token);\n\nnode.status({\n    fill: \"green\",\n    shape: \"dot\",\n    text: \"Token updated\"\n});\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 710,
+        "y": 120,
+        "wires": [
+            [
+                "1e29389162a28151"
+            ]
+        ]
+    },
+    {
+        "id": "1e29389162a28151",
+        "type": "debug",
+        "z": "4ecb101782125ccc",
+        "name": "debug 3",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 880,
+        "y": 120,
+        "wires": []
+    }
+]
