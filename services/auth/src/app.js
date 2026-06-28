@@ -184,7 +184,7 @@ app.post("/oauth/token", async (req, res) => {
 
       // Find user
       const [users] = await connection.query(
-        "SELECT * FROM users WHERE email = ? AND is_active = TRUE",
+        "SELECT * FROM citizen_citizens WHERE email = ? AND is_active = TRUE",
         [username],
       );
 
@@ -317,7 +317,7 @@ app.post("/oauth/token", async (req, res) => {
 
       // Find refresh token
       const [tokens] = await connection.query(
-        "SELECT rt.*, u.* FROM refresh_tokens rt JOIN users u ON rt.user_id = u.id WHERE rt.token = ? AND rt.is_revoked = FALSE AND rt.expires_at > NOW()",
+        "SELECT rt.*, u.* FROM refresh_tokens rt JOIN citizen_citizens u ON rt.user_id = u.id WHERE rt.token = ? AND rt.is_revoked = FALSE AND rt.expires_at > NOW()",
         [refresh_token],
       );
 
@@ -498,88 +498,88 @@ app.post("/oauth/revoke", async (req, res) => {
 
 // ==================== USER ENDPOINTS ====================
 
-app.post("/register", async (req, res) => {
-  const { name, email, password } = req.body;
+// app.post("/register", async (req, res) => {
+//   const { name, email, password } = req.body;
 
-  if (!name || !email || !password) {
-    return errorResponse(
-      res,
-      422,
-      "error",
-      "name, email, and password are required",
-    );
-  }
+//   if (!name || !email || !password) {
+//     return errorResponse(
+//       res,
+//       422,
+//       "error",
+//       "name, email, and password are required",
+//     );
+//   }
 
-  if (password.length < 6) {
-    return errorResponse(
-      res,
-      422,
-      "error",
-      "Password must be at least 6 characters",
-    );
-  }
+//   if (password.length < 6) {
+//     return errorResponse(
+//       res,
+//       422,
+//       "error",
+//       "Password must be at least 6 characters",
+//     );
+//   }
 
-  try {
-    const connection = await db.getConnection();
+//   try {
+//     const connection = await db.getConnection();
 
-    // Check if email exists
-    const [existing] = await connection.query(
-      "SELECT id FROM users WHERE email = ?",
-      [email],
-    );
+//     // Check if email exists
+//     const [existing] = await connection.query(
+//       "SELECT id FROM citizen_citizens WHERE email = ?",
+//       [email],
+//     );
 
-    if (existing.length > 0) {
-      connection.release();
-      return errorResponse(res, 409, "error", "Email already registered");
-    }
+//     if (existing.length > 0) {
+//       connection.release();
+//       return errorResponse(res, 409, "error", "Email already registered");
+//     }
 
-    // Hash password and create user
-    const hashedPassword = await hashPassword(password);
-    const [result] = await connection.query(
-      "INSERT INTO users (name, email, password, oauth_provider, is_active) VALUES (?, ?, ?, ?, TRUE)",
-      [name, email, hashedPassword, "local"],
-    );
+//     // Hash password and create user
+//     const hashedPassword = await hashPassword(password);
+//     const [result] = await connection.query(
+//       "INSERT INTO citizen_citizens (name, email, password, oauth_provider, is_active) VALUES (?, ?, ?, ?, TRUE)",
+//       [name, email, hashedPassword, "local"],
+//     );
 
-    const userId = result.insertId;
+//     const userId = result.insertId;
 
-    // Generate tokens
-    const user = { id: userId, email, name, role: "user" };
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(userId);
+//     // Generate tokens
+//     const user = { id: userId, email, name, role: "user" };
+//     const accessToken = generateAccessToken(user);
+//     const refreshToken = generateRefreshToken(userId);
 
-    // Save refresh token
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+//     // Save refresh token
+//     const expiresAt = new Date();
+//     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    await connection.query(
-      "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
-      [userId, refreshToken, expiresAt],
-    );
+//     await connection.query(
+//       "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
+//       [userId, refreshToken, expiresAt],
+//     );
 
-    connection.release();
+//     connection.release();
 
-    return res.status(201).json({
-      status: "success",
-      code: 201,
-      data: {
-        user: {
-          id: userId,
-          name,
-          email,
-        },
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        token_type: "Bearer",
-      },
-      message: "User registered successfully",
-      timestamp: new Date().toISOString(),
-      service: "auth",
-    });
-  } catch (error) {
-    console.error("Registration error:", error);
-    errorResponse(res, 500, "error", "Registration failed");
-  }
-});
+//     return res.status(201).json({
+//       status: "success",
+//       code: 201,
+//       data: {
+//         user: {
+//           id: userId,
+//           name,
+//           email,
+//         },
+//         access_token: accessToken,
+//         refresh_token: refreshToken,
+//         token_type: "Bearer",
+//       },
+//       message: "User registered successfully",
+//       timestamp: new Date().toISOString(),
+//       service: "auth",
+//     });
+//   } catch (error) {
+//     console.error("Registration error:", error);
+//     errorResponse(res, 500, "error", "Registration failed");
+//   }
+// });
 
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
@@ -592,7 +592,7 @@ app.post("/login", async (req, res) => {
     const connection = await db.getConnection();
 
     const [users] = await connection.query(
-      "SELECT * FROM users WHERE email = ? AND is_active = TRUE",
+      "SELECT * FROM citizen_citizens WHERE email = ? AND is_active = TRUE",
       [email],
     );
 
@@ -694,7 +694,7 @@ const findOrCreateSocialUser = async (profile) => {
 
     if (sa.length > 0) {
       const [users] = await connection.query(
-        "SELECT * FROM users WHERE id = ?",
+        "SELECT * FROM citizen_citizens WHERE id = ?",
         [sa[0].user_id],
       );
       await connection.commit();
@@ -705,7 +705,7 @@ const findOrCreateSocialUser = async (profile) => {
     let userId;
     if (profile.email) {
       const [existingUsers] = await connection.query(
-        "SELECT * FROM users WHERE email = ?",
+        "SELECT * FROM citizen_citizens WHERE email = ?",
         [profile.email],
       );
       if (existingUsers.length > 0) {
@@ -718,7 +718,7 @@ const findOrCreateSocialUser = async (profile) => {
       const emailToUse =
         profile.email || `${profile.id}@${profile.provider}.local`;
       const [res] = await connection.query(
-        "INSERT INTO users (name, email, avatar_url, oauth_provider, is_active) VALUES (?, ?, ?, ?, TRUE)",
+        "INSERT INTO citizen_citizens (name, email, avatar_url, oauth_provider, is_active) VALUES (?, ?, ?, ?, TRUE)",
         [
           profile.name || "Unknown User",
           emailToUse,
@@ -737,7 +737,7 @@ const findOrCreateSocialUser = async (profile) => {
 
     await connection.commit();
     const [finalUser] = await connection.query(
-      "SELECT * FROM users WHERE id = ?",
+      "SELECT * FROM citizen_citizens WHERE id = ?",
       [userId],
     );
     return finalUser[0];
