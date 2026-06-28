@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-ml
+  namespace: smartcity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: python-ml
+  template:
+    metadata:
+      labels:
+        app: python-ml
+    spec:
+      containers:
+        - name: python-ml
+          image: ghcr.io/ainaa0099/smartcity-python-ml:latest
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn"]
+          args: ["app:app", "--host", "0.0.0.0", "--port", "5000"]
+          ports:
+            - containerPort: 5000
+          env:
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcity-config
+                  key: PORT_ML
+            - name: RABBITMQ_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcity-config
+                  key: RABBITMQ_HOST
+            - name: RABBITMQ_EXCHANGE
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcity-config
+                  key: RABBITMQ_EXCHANGE
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: python-ml-service
+  namespace: smartcity
+spec:
+  type: ClusterIP
+  selector:
+    app: python-ml
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iot-simulator
+  namespace: smartcity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iot-simulator
+  template:
+    metadata:
+      labels:
+        app: iot-simulator
+    spec:
+      containers:
+        - name: iot-simulator
+          image: ghcr.io/ainaa0099/smartcity-python-ml:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python"]
+          args: ["simulator.py"]
+          env:
+            - name: MQTT_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcity-config
+                  key: MQTT_HOST
+            - name: MQTT_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcity-config
+                  key: MQTT_PORT
+

@@ -1,0 +1,260 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: citizen-service
+  namespace: smartcity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: citizen-service
+  template:
+    metadata:
+      labels:
+        app: citizen-service
+    spec:
+      containers:
+        - name: citizen-service
+          image: ghcr.io/ainaa0099/smartcity-citizen:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: smartcity-config
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: DB_USER
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: DB_PASS
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: RABBITMQ_PASS
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: citizen-service
+  namespace: smartcity
+spec:
+  type: ClusterIP
+  selector:
+    app: citizen-service
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airquality-service
+  namespace: smartcity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airquality-service
+  template:
+    metadata:
+      labels:
+        app: airquality-service
+    spec:
+      containers:
+        - name: airquality-service
+          image: ghcr.io/ainaa0099/smartcity-airquality:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8001
+          envFrom:
+            - configMapRef:
+                name: smartcity-config
+          env:
+            - name: APP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcity-config
+                  key: PORT_AIRQUALITY
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: DB_USER
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: DB_PASS
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: RABBITMQ_PASS
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 20
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airquality-service
+  namespace: smartcity
+spec:
+  type: ClusterIP
+  selector:
+    app: airquality-service
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: environment-service
+  namespace: smartcity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: environment-service
+  template:
+    metadata:
+      labels:
+        app: environment-service
+    spec:
+      containers:
+        - name: environment-service
+          image: ghcr.io/ainaa0099/smartcity-environment:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8002
+          envFrom:
+            - configMapRef:
+                name: smartcity-config
+          env:
+            - name: APP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: smartcity-config
+                  key: PORT_ENVIRONMENT
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: DB_USER
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: DB_PASS
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: RABBITMQ_PASS
+          # Environment service belum punya /health di branch terbaru.
+          readinessProbe:
+            tcpSocket:
+              port: 8002
+            initialDelaySeconds: 20
+            periodSeconds: 10
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: environment-consumer
+  namespace: smartcity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: environment-consumer
+  template:
+    metadata:
+      labels:
+        app: environment-consumer
+    spec:
+      containers:
+        - name: environment-consumer
+          image: ghcr.io/ainaa0099/smartcity-environment:latest
+          imagePullPolicy: IfNotPresent
+          command: ["php"]
+          args: ["consumer.php"]
+          envFrom:
+            - configMapRef:
+                name: smartcity-config
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: DB_USER
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: DB_PASS
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: smartcity-secrets
+                  key: RABBITMQ_PASS
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: environment-service
+  namespace: smartcity
+spec:
+  type: ClusterIP
+  selector:
+    app: environment-service
+  ports:
+    - name: http
+      port: 8002
+      targetPort: 8002
+
