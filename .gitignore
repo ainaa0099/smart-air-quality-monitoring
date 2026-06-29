@@ -50,8 +50,21 @@ dist/
 build/
 coverage/
 
+# Local Codex/review artifacts
+.codex/
+*.zip
+
 # Docker/local volumes
 node-red-data/
+!iot/node-red-data/
+!iot/node-red-data/flows.json
+!iot/node-red-data/package.json
+!iot/node-red-data/settings.js
+iot/node-red-data/.npm/
+iot/node-red-data/node_modules/
+iot/node-red-data/*.backup
+iot/node-red-data/*.log
+iot/node-red-data/.config.*.json
 grafana-data/
 prometheus-data/
 mysql-data/

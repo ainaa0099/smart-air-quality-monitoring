@@ -22,7 +22,7 @@ $uri = parse_url(
 );
 
 // Routing sederhana untuk endpoint environment-service.
-if ($uri == '/api/environment/weather'
+if (($uri == '/api/environment/weather' || $uri == '/iot/weather')
     && $_SERVER['REQUEST_METHOD'] == 'POST') {
 
     (new WeatherController())->store();

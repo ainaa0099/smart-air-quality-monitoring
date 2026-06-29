@@ -17,6 +17,10 @@ final class ReadingController
         // Beberapa flow IoT membungkus payload sensor di dalam key "data".
         $input = isset($input['data']) && is_array($input['data']) ? $input['data'] : $input;
 
+        if (isset($input['timestamp']) && !isset($input['recorded_at'])) {
+            $input['recorded_at'] = $input['timestamp'];
+        }
+
         // Simulator anggota ML
         if (isset($input['station_id'])) { $input['station_id'] = (int) $input['station_id'];
         }

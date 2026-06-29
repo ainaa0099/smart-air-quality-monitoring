@@ -20,6 +20,29 @@ class WeatherController
             return;
         }
 
+        $data = isset($data['data']) && is_array($data['data']) ? $data['data'] : $data;
+
+        if (isset($data['timestamp']) && !isset($data['recorded_at'])) {
+            $data['recorded_at'] = $data['timestamp'];
+        }
+
+        if (isset($data['wind_direction']) && !is_numeric($data['wind_direction'])) {
+            $directions = [
+                'N' => 0,
+                'NE' => 45,
+                'E' => 90,
+                'SE' => 135,
+                'S' => 180,
+                'SW' => 225,
+                'W' => 270,
+                'NW' => 315
+            ];
+            $key = strtoupper(trim((string) $data['wind_direction']));
+            if (array_key_exists($key, $directions)) {
+                $data['wind_direction'] = $directions[$key];
+            }
+        }
+
         // Data cuaca wajib lengkap supaya record yang masuk konsisten per zona.
         $requiredFields = [
             'zone_id',

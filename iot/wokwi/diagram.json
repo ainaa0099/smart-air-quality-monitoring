@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "author": "Smart Air Quality Monitoring",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 24, "left": 12, "attrs": {} },
+    { "type": "wokwi-dht22", "id": "dht1", "top": -40, "left": 260, "attrs": { "temperature": "31", "humidity": "74" } },
+    { "type": "wokwi-potentiometer", "id": "pot_pm25", "top": 180, "left": 260, "attrs": { "value": "420" } },
+    { "type": "wokwi-potentiometer", "id": "pot_pm10", "top": 180, "left": 420, "attrs": { "value": "530" } },
+    { "type": "wokwi-potentiometer", "id": "pot_no2", "top": 300, "left": 260, "attrs": { "value": "320" } },
+    { "type": "wokwi-potentiometer", "id": "pot_co", "top": 300, "left": 420, "attrs": { "value": "260" } },
+    { "type": "wokwi-potentiometer", "id": "pot_o3", "top": 420, "left": 260, "attrs": { "value": "350" } },
+    { "type": "wokwi-potentiometer", "id": "pot_wind", "top": 420, "left": 420, "attrs": { "value": "390" } },
+    { "type": "wokwi-potentiometer", "id": "pot_wind_dir", "top": 540, "left": 340, "attrs": { "value": "500" } }
+  ],
+  "connections": [
+    [ "esp:3V3", "dht1:VCC", "red", [] ],
+    [ "esp:GND.1", "dht1:GND", "black", [] ],
+    [ "esp:D15", "dht1:SDA", "green", [] ],
+
+    [ "esp:3V3", "pot_pm25:VCC", "red", [] ],
+    [ "esp:GND.1", "pot_pm25:GND", "black", [] ],
+    [ "esp:D34", "pot_pm25:SIG", "green", [] ],
+
+    [ "esp:3V3", "pot_pm10:VCC", "red", [] ],
+    [ "esp:GND.1", "pot_pm10:GND", "black", [] ],
+    [ "esp:D35", "pot_pm10:SIG", "green", [] ],
+
+    [ "esp:3V3", "pot_no2:VCC", "red", [] ],
+    [ "esp:GND.1", "pot_no2:GND", "black", [] ],
+    [ "esp:D32", "pot_no2:SIG", "green", [] ],
+
+    [ "esp:3V3", "pot_co:VCC", "red", [] ],
+    [ "esp:GND.1", "pot_co:GND", "black", [] ],
+    [ "esp:D33", "pot_co:SIG", "green", [] ],
+
+    [ "esp:3V3", "pot_o3:VCC", "red", [] ],
+    [ "esp:GND.1", "pot_o3:GND", "black", [] ],
+    [ "esp:D25", "pot_o3:SIG", "green", [] ],
+
+    [ "esp:3V3", "pot_wind:VCC", "red", [] ],
+    [ "esp:GND.1", "pot_wind:GND", "black", [] ],
+    [ "esp:D26", "pot_wind:SIG", "green", [] ],
+
+    [ "esp:3V3", "pot_wind_dir:VCC", "red", [] ],
+    [ "esp:GND.1", "pot_wind_dir:GND", "black", [] ],
+    [ "esp:D27", "pot_wind_dir:SIG", "green", [] ]
+  ],
+  "dependencies": {}
+}

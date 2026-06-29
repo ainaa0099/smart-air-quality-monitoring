@@ -383,7 +383,7 @@ services:
     container_name: smartcity-iot-simulator
 
     build:
-      context: ./ml-service
+      context: ./iot
       dockerfile: Dockerfile
 
     restart: unless-stopped

@@ -24,7 +24,7 @@ services:
   # Override development untuk simulator agar memakai source ml-service lokal.
   iot-simulator:
     volumes:
-      - ./ml-service:/app
+      - ./iot:/app
 
   # Port database dibuka ke host agar bisa dicek dari DB client lokal.
   mysql:
