@@ -382,7 +382,18 @@ const createServiceProxy = (targetUrl) => {
   });
 };
 
-const roleFromRequest = (req) => req.user?.role || "unknown";
+const roleFromRequest = (req) => {
+  if (req.user?.role) {
+    return req.user.role;
+  }
+
+  // OAuth client_credentials token
+  if (req.user?.client_id) {
+    return "admin";
+  }
+
+  return "unknown";
+};
 
 const forbiddenRoleResponse = (req, res) => {
   return res.status(403).json({

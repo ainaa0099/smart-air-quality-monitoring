@@ -257,7 +257,13 @@ app.post("/oauth/token", async (req, res) => {
       }
 
       // Check if client supports this grant type
-      const grantTypes = JSON.parse(client.grant_types || "[]");
+      let grantTypes = [];
+
+      if (Array.isArray(client.grant_types)) {
+          grantTypes = client.grant_types;
+      } else if (typeof client.grant_types === "string") {
+          grantTypes = JSON.parse(client.grant_types);
+      }
       if (!grantTypes.includes("client_credentials")) {
         return errorResponse(
           res,
@@ -273,6 +279,7 @@ app.post("/oauth/token", async (req, res) => {
           sub: client.client_id,
           client_id: client.client_id,
           client_name: client.client_name,
+          role: "admin",
           scope: scope || "default",
         },
         JWT_ACCESS_SECRET,
@@ -399,6 +406,8 @@ app.post("/oauth/introspect", async (req, res) => {
     });
   }
 
+  console.log("BODY:", req.body);
+  console.log("HEADERS:", req.headers);
   const { token } = req.body;
 
   if (!token) {
@@ -440,7 +449,11 @@ app.post("/oauth/introspect", async (req, res) => {
       expires_in: Math.max(0, decoded.exp - Math.floor(Date.now() / 1000)),
     });
   } catch (error) {
-    // Token is invalid or expired
+    console.error("==== INTROSPECTION ERROR ====");
+    console.error("Token:", token);
+    console.error("JWT_ACCESS_SECRET:", JWT_ACCESS_SECRET);
+    console.error(error);
+
     return res.status(200).json({
       active: false,
       error: error.message,
